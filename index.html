@@ -16,6 +16,12 @@
   .cfg{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);padding:8px 12px;border-radius:8px;}
   .cfg label{font-size:13px;}
   .cfg input{width:60px;padding:6px 8px;border:none;border-radius:6px;text-align:center;font-weight:700;font-size:15px;}
+  .tabs{display:flex;gap:4px;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid var(--line);padding:0 20px;}
+  .tab{padding:13px 18px;cursor:pointer;border:none;background:transparent;border-bottom:2px solid transparent;color:var(--muted);font-weight:700;font-size:14px;font-family:inherit;}
+  .tab.active{color:var(--navy);border-bottom-color:var(--blue);}
+  .tab:hover{color:var(--navy);}
+  .savep{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;white-space:nowrap;}
+  .savep .dot{color:var(--green);font-size:14px;}
   .wrap{max-width:1150px;margin:0 auto;padding:20px;}
   button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:7px;border:1px solid var(--line);background:#fff;padding:8px 14px;transition:.15s;}
   button:hover{background:#f0f3f7;}
@@ -65,9 +71,26 @@
   .sub-foot{font-size:12px;color:var(--muted);text-align:right;padding:5px 7px 2px;}
   .sub-foot b{color:#374151;}
   .col-name{width:26%;}.col-tipo{width:15%;}.col-val{width:13%;}
+  .tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tbl-wrap table{min-width:560px;}
   footer{max-width:1150px;margin:6px auto 40px;padding:0 20px;color:var(--muted);font-size:12px;}
   @media(max-width:700px){.hide{display:none;}}
-  @media print{.toolbar,.btn-ghost{display:none;}button{display:none;}}
+  @media(max-width:600px){
+    header{padding:12px 14px;gap:10px;}
+    header h1{font-size:16px;min-width:100%;}
+    .cfgs{width:100%;}
+    .wrap{padding:12px;}
+    .tabs{padding:0 10px;flex-wrap:wrap;}
+    .tab{padding:11px 12px;font-size:13px;}
+    .savep{font-size:11px;width:100%;padding:4px 0 8px;}
+    .stat .val{font-size:20px;}
+    .cat-head{padding:10px 12px;gap:8px;}
+    .cat-tot{font-size:11px;width:100%;order:3;}
+    .sub{padding:6px 10px 12px;}
+    .panel{padding:14px 12px;}
+    .chart-box{height:300px;}
+  }
+  @media print{.toolbar,.btn-ghost,.tabs{display:none;}button{display:none;}}
 </style>
 </head>
 <body>
@@ -79,94 +102,77 @@
   </div>
 </header>
 
+<div class="tabs">
+  <div style="display:flex;gap:4px;">
+    <button class="tab active" id="tab-btn-planilla" onclick="showTab('planilla')">Planilla</button>
+    <button class="tab" id="tab-btn-metricas" onclick="showTab('metricas')">Métricas</button>
+  </div>
+  <span class="savep" id="saveState"><span class="dot">●</span> Guardado automáticamente</span>
+</div>
+
 <div class="wrap">
-  <div class="summary" id="kpis"></div>
-
-  <div class="panel">
-    <h2>Presupuesto vs. gasto real por categoría (temporada)</h2>
-    <div class="legend">
-      <span><span class="swatch" style="background:#b5d4f4"></span>Presupuesto</span>
-      <span><span class="swatch" style="background:#2a78d6"></span>Gasto real</span>
+  <div id="view-planilla">
+    <div class="toolbar">
+      <button class="btn-primary" onclick="addCat()">+ Agregar categoría</button>
+      <button onclick="exportCSV()">Exportar CSV</button>
+      <button onclick="window.print()">Imprimir / PDF</button>
+      <button onclick="resetAll()">Reiniciar</button>
     </div>
-    <div class="chart-box"><canvas id="catChart"></canvas></div>
+    <div id="cats"></div>
   </div>
 
-  <div class="panel">
-    <h2>Alertas</h2>
-    <div class="alerts" id="alerts"></div>
+  <div id="view-metricas" style="display:none">
+    <div class="summary" id="kpis"></div>
+    <div class="panel">
+      <h2>Presupuesto vs. gasto real por categoría (temporada)</h2>
+      <div class="legend">
+        <span><span class="swatch" style="background:#b5d4f4"></span>Presupuesto</span>
+        <span><span class="swatch" style="background:#2a78d6"></span>Gasto real</span>
+      </div>
+      <div class="chart-box"><canvas id="catChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Alertas</h2>
+      <div class="alerts" id="alerts"></div>
+    </div>
   </div>
-
-  <div class="toolbar">
-    <button class="btn-primary" onclick="addCat()">+ Agregar categoría</button>
-    <button onclick="exportCSV()">Exportar CSV</button>
-    <button onclick="window.print()">Imprimir / PDF</button>
-    <button onclick="resetAll()">Reiniciar</button>
-  </div>
-
-  <div id="cats"></div>
 </div>
 
 <footer>
-  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b> (total a la fecha). El dashboard y los totales se actualizan solos. Los datos se guardan en este navegador.
+  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b>. Escribe el número y al salir del campo (clic afuera o Enter) se recalcula todo. Las métricas están en la pestaña "Métricas". Montos en pesos chilenos (CLP). Los datos se guardan en este navegador.
 </footer>
 
 <script>
-const fmt=n=>(n<0?'-':'')+'$'+Math.round(Math.abs(n)).toLocaleString('en-US');
+const nf=new Intl.NumberFormat('es-CL',{maximumFractionDigits:0});
+const fmt=n=>(n<0?'-':'')+'$'+nf.format(Math.round(Math.abs(n)));
 const TIPOS={capitulo:'Por capítulo',mensual:'Mensual',total:'Total temporada'};
 let uid=1; const nid=()=>'x'+(uid++);
 
 function seed(){
   const C=(nombre,subs)=>({id:nid(),nombre,subs:subs.map(([sn,items])=>({id:nid(),nombre:sn,items:items.map(([n,t,v,r])=>({id:nid(),nombre:n,tipo:t,valor:v,real:r}))}))});
   return {caps:8,meses:3,cats:[
-    C('Producción',[
-      ['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],
-      ['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],
-      ['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],
-      ['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]],
-    ]),
-    C('Equipo técnico',[
-      ['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],
-      ['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],
-      ['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]],
-    ]),
-    C('Famosos',[
-      ['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],
-      ['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]],
-    ]),
-    C('Edición',[
-      ['Edición',[['Editor principal','capitulo',4000,32000],['Asistente de edición','capitulo',1800,14400]]],
-      ['Post de audio',[['Mezcla y post de audio','capitulo',2600,21000],['Música y licencias','total',18000,16500]]],
-      ['Gráficos',[['Motion graphics','capitulo',1500,12000]]],
-    ]),
-    C('Arte y vestuario',[
-      ['Vestuario',[['Diseño de vestuario','capitulo',2200,18000],['Compra de vestuario','total',9000,8200]]],
-      ['Arte',[['Arte o ambientador','capitulo',2000,16000],['Utilería y escenografía','total',14000,15800]]],
-      ['Maquillaje',[['Maquillaje y peinado','capitulo',1600,12800]]],
-    ]),
-    C('Alimentación',[
-      ['Equipo',[['Catering equipo','capitulo',1200,10200]]],
-      ['Participantes',[['Comidas participantes','capitulo',800,7400]]],
-      ['Bebidas y snacks',[['Bebidas y snacks set','capitulo',300,2600]]],
-    ]),
-    C('Transporte',[
-      ['Traslados',[['Traslado en van','capitulo',1500,12000],['Combustible','mensual',900,2700]]],
-      ['Logística',[['Renta de van adicional','mensual',1800,5400]]],
-    ]),
-    C('Premio',[
-      ['Ganador',[['Premio en efectivo','total',40000,40000]]],
-      ['Otros premios',[['Premios por episodio','capitulo',1000,8000]]],
-    ]),
+    C('Producción',[['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]]]),
+    C('Equipo técnico',[['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]]]),
+    C('Famosos',[['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]]]),
+    C('Edición',[['Edición',[['Editor principal','capitulo',4000,32000],['Asistente de edición','capitulo',1800,14400]]],['Post de audio',[['Mezcla y post de audio','capitulo',2600,21000],['Música y licencias','total',18000,16500]]],['Gráficos',[['Motion graphics','capitulo',1500,12000]]]]),
+    C('Arte y vestuario',[['Vestuario',[['Diseño de vestuario','capitulo',2200,18000],['Compra de vestuario','total',9000,8200]]],['Arte',[['Arte o ambientador','capitulo',2000,16000],['Utilería y escenografía','total',14000,15800]]],['Maquillaje',[['Maquillaje y peinado','capitulo',1600,12800]]]]),
+    C('Alimentación',[['Equipo',[['Catering equipo','capitulo',1200,10200]]],['Participantes',[['Comidas participantes','capitulo',800,7400]]],['Bebidas y snacks',[['Bebidas y snacks set','capitulo',300,2600]]]]),
+    C('Transporte',[['Traslados',[['Traslado en van','capitulo',1500,12000],['Combustible','mensual',900,2700]]],['Logística',[['Renta de van adicional','mensual',1800,5400]]]]),
+    C('Premio',[['Ganador',[['Premio en efectivo','total',40000,40000]]],['Otros premios',[['Premios por episodio','capitulo',1000,8000]]]]),
   ]};
 }
 
 let state, chart;
 function load(){
-  try{const s=localStorage.getItem('dashTV2');if(s){state=JSON.parse(s);if(!state.meses)state.meses=3;
+  try{const s=localStorage.getItem('dashTV3');if(s){state=JSON.parse(s);if(!state.meses)state.meses=3;
     let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};
     state.cats.forEach(c=>{sc(c);c.subs.forEach(s=>{sc(s);s.items.forEach(sc);});});uid=mx+1;return;}}catch(e){}
   state=seed();
 }
-function save(){try{localStorage.setItem('dashTV2',JSON.stringify(state));}catch(e){}}
+function save(){const el=document.getElementById('saveState');
+  try{localStorage.setItem('dashTV3',JSON.stringify(state));
+    if(el)el.innerHTML='<span class="dot">●</span> Guardado '+new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){if(el)el.innerHTML='<span class="dot" style="color:var(--red)">●</span> No se pudo guardar';}}
 
 function calcBudget(it){const caps=state.caps||1,meses=state.meses||1,v=+it.valor||0;
   if(it.tipo==='total')return{cap:v/caps,temp:v};
@@ -182,11 +188,11 @@ function delSub(cid,sid){const c=catById(cid);c.subs=c.subs.filter(s=>s.id!==sid
 function addItem(cid,sid){subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,real:0});save();render();}
 function delItem(cid,sid,iid){const s=subById(catById(cid),sid);s.items=s.items.filter(i=>i.id!==iid);save();render();}
 function upd(cid,sid,iid,f,v){const c=catById(cid);
-  if(f==='catname'){c.nombre=v;save();renderChart();renderAlerts();return;}
+  if(f==='catname'){c.nombre=v;save();return;}
   const s=subById(c,sid);
   if(f==='subname'){s.nombre=v;save();return;}
   const it=s.items.find(i=>i.id===iid);
-  if(f==='nombre')it.nombre=v;
+  if(f==='nombre'){it.nombre=v;save();return;}
   else if(f==='tipo'){it.tipo=v;save();render();return;}
   else if(f==='valor'){it.valor=parseFloat(v)||0;save();render();return;}
   else if(f==='real'){it.real=parseFloat(v)||0;save();render();return;}
@@ -229,6 +235,8 @@ function renderAlerts(){
   box.innerHTML=out.join('');
 }
 
+function metricasVisible(){return document.getElementById('view-metricas').style.display!=='none';}
+
 function render(){
   const root=document.getElementById('cats');root.innerHTML='';
   state.cats.forEach(cat=>{
@@ -244,9 +252,9 @@ function render(){
         return `<tr>
           <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
-          <td class="col-val"><input class="val" type="number" value="${it.valor}" oninput="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
+          <td class="col-val"><input class="val" type="number" value="${it.valor}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
           <td class="num calc hide">${fmt(cb.temp)}</td>
-          <td class="col-val"><input class="val" type="number" value="${it.real}" oninput="upd('${cat.id}','${sub.id}','${it.id}','real',this.value)"></td>
+          <td class="col-val"><input class="val" type="number" value="${it.real}" onchange="upd('${cat.id}','${sub.id}','${it.id}','real',this.value)"></td>
           <td class="num calc ${dif<0?'dif-neg':'dif-pos'}">${fmt(dif)}</td>
           <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
         </tr>`;}).join('');
@@ -254,10 +262,10 @@ function render(){
       sd.innerHTML=`
         <div class="sub-head"><input class="name" value="${esc(sub.nombre)}" oninput="upd('${cat.id}','${sub.id}',null,'subname',this.value)">
           <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
-        <table><thead><tr>
+        <div class="tbl-wrap"><table><thead><tr>
           <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Presupuesto</th>
           <th class="num hide">Total temp.</th><th class="num col-val">Gasto real</th><th class="num">Dif.</th><th></th>
-        </tr></thead><tbody>${rows}</tbody></table>
+        </tr></thead><tbody>${rows}</tbody></table></div>
         <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
         <div class="sub-foot">Presupuesto <b>${fmt(sb)}</b> · Real <b>${fmt(sr)}</b> · Dif. <b class="${sdif<0?'dif-neg':'dif-pos'}">${fmt(sdif)}</b></div>`;
       sec.appendChild(sd);
@@ -269,9 +277,17 @@ function render(){
         <button class="btn-ghost" onclick="delCat('${cat.id}')">Eliminar</button></div>`;
     cd.appendChild(sec);root.appendChild(cd);
   });
-  renderKPIs();renderChart();renderAlerts();
+  renderKPIs();renderAlerts();if(metricasVisible())renderChart();
 }
 function esc(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function showTab(name){
+  document.getElementById('view-planilla').style.display=name==='planilla'?'':'none';
+  document.getElementById('view-metricas').style.display=name==='metricas'?'':'none';
+  document.getElementById('tab-btn-planilla').classList.toggle('active',name==='planilla');
+  document.getElementById('tab-btn-metricas').classList.toggle('active',name==='metricas');
+  if(name==='metricas'){renderKPIs();renderAlerts();renderChart();}
+}
 
 function exportCSV(){
   let rows=[['Categoría','Subcategoría','Concepto','Tipo','Presupuesto unitario','Presupuesto temporada','Gasto real','Diferencia']];
@@ -282,8 +298,8 @@ function exportCSV(){
 }
 function resetAll(){if(confirm('¿Borrar todo y empezar de cero?')){state=seed();save();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();}}
 
-document.getElementById('caps').addEventListener('input',e=>{state.caps=parseInt(e.target.value)||1;save();render();});
-document.getElementById('meses').addEventListener('input',e=>{state.meses=parseInt(e.target.value)||1;save();render();});
+document.getElementById('caps').addEventListener('change',e=>{state.caps=parseInt(e.target.value)||1;save();render();});
+document.getElementById('meses').addEventListener('change',e=>{state.meses=parseInt(e.target.value)||1;save();render();});
 load();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();
 </script>
 </body>
