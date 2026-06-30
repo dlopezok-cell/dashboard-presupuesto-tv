@@ -141,7 +141,7 @@
 </div>
 
 <footer>
-  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b>. Escribe el número y al salir del campo (clic afuera o Enter) se recalcula todo. Las métricas están en la pestaña "Métricas". Montos en pesos chilenos (CLP). Los datos se guardan en este navegador.
+  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b>. Escribe el número y al salir del campo (clic afuera o Enter) se recalcula todo. Las métricas están en la pestaña "Métricas". Montos en pesos chilenos (CLP). Los cambios se guardan y sincronizan en la nube en tiempo real para todos los que tengan el enlace.
 </footer>
 
 <script>
@@ -166,16 +166,20 @@ function seed(){
 
 const FB_CONFIG={apiKey:"AIzaSyDP3PtRrIBmdi3S2DooQIu10pcy-Jk1zIo",authDomain:"presupuesto-tv.firebaseapp.com",databaseURL:"https://presupuesto-tv-default-rtdb.firebaseio.com",projectId:"presupuesto-tv",storageBucket:"presupuesto-tv.firebasestorage.app",messagingSenderId:"678972356758",appId:"1:678972356758:web:697429b47e9e142bac6ab7"};
 let state, chart, dbRef=null, online=false, saveTimer=null, lastPushed='';
+function toArr(x){if(Array.isArray(x))return x.filter(e=>e!=null);if(x&&typeof x==='object')return Object.keys(x).sort((a,b)=>a-b).map(k=>x[k]).filter(e=>e!=null);return [];}
+function normalize(s){if(!s||typeof s!=='object')return seed();
+  s.cats=toArr(s.cats).map(c=>{c=c||{};if(!c.id)c.id=nid();if(c.nombre==null)c.nombre='';c.subs=toArr(c.subs).map(sub=>{sub=sub||{};if(!sub.id)sub.id=nid();if(sub.nombre==null)sub.nombre='';sub.items=toArr(sub.items).map(it=>{it=it||{};if(!it.id)it.id=nid();if(it.nombre==null)it.nombre='';if(!it.tipo)it.tipo='capitulo';it.valor=+it.valor||0;it.real=+it.real||0;return it;});return sub;});return c;});
+  s.caps=parseInt(s.caps)||8;s.meses=parseInt(s.meses)||3;return s;}
 function fixUid(){let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};(state.cats||[]).forEach(c=>{sc(c);(c.subs||[]).forEach(s=>{sc(s);(s.items||[]).forEach(sc);});});uid=mx+1;}
 function load(){
-  try{const s=localStorage.getItem('dashTV3');if(s){state=JSON.parse(s);if(!state.meses)state.meses=3;fixUid();return;}}catch(e){}
+  try{const s=localStorage.getItem('dashTV3');if(s){state=normalize(JSON.parse(s));fixUid();return;}}catch(e){}
   state=seed();
 }
 function updateSaveLabel(){const el=document.getElementById('saveState');if(!el)return;
   if(dbRef){el.innerHTML='<span class="dot" style="color:'+(online?'var(--green)':'#b9770e')+'">●</span> '+(online?'En vivo · sincronizado':'Reconectando…');}
   else{el.innerHTML='<span class="dot">●</span> Guardado en este equipo';}}
 function pushNow(){if(!dbRef)return;try{lastPushed=JSON.stringify(state);dbRef.set(JSON.parse(lastPushed)).catch(()=>{});}catch(e){}}
-function applyRemote(v){if(!v)return;const inc=JSON.stringify(v);if(inc===JSON.stringify(state))return;state=v;if(!state.meses)state.meses=3;fixUid();
+function applyRemote(v){if(!v)return;const nv=normalize(JSON.parse(JSON.stringify(v)));const inc=JSON.stringify(nv);if(inc===JSON.stringify(state))return;state=nv;fixUid();
   const cEl=document.getElementById('caps'),mEl=document.getElementById('meses');if(cEl)cEl.value=state.caps;if(mEl)mEl.value=state.meses;render();}
 function initFirebase(){try{firebase.initializeApp(FB_CONFIG);dbRef=firebase.database().ref('presupuesto');
   dbRef.on('value',snap=>{const v=snap.val();if(v){applyRemote(v);}else{pushNow();}updateSaveLabel();});
@@ -210,8 +214,8 @@ function upd(cid,sid,iid,f,v){const c=catById(cid);
   save();
 }
 
-function catTotals(cat){let b=0,r=0,bc=0;cat.subs.forEach(s=>s.items.forEach(it=>{const cb=calcBudget(it);b+=cb.temp;bc+=cb.cap;r+=(+it.real||0);}));return{budget:b,real:r,budgetCap:bc};}
-function grand(){let b=0,r=0,bc=0;state.cats.forEach(c=>{const t=catTotals(c);b+=t.budget;r+=t.real;bc+=t.budgetCap;});return{budget:b,real:r,budgetCap:bc};}
+function catTotals(cat){let b=0,r=0,bc=0;(cat.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);b+=cb.temp;bc+=cb.cap;r+=(+it.real||0);}));return{budget:b,real:r,budgetCap:bc};}
+function grand(){let b=0,r=0,bc=0;(state.cats||[]).forEach(c=>{const t=catTotals(c);b+=t.budget;r+=t.real;bc+=t.budgetCap;});return{budget:b,real:r,budgetCap:bc};}
 
 function renderKPIs(){
   const g=grand();const dif=g.budget-g.real;const pct=g.budget?Math.round(g.real/g.budget*100):0;
@@ -224,9 +228,9 @@ function renderKPIs(){
 }
 
 function renderChart(){
-  const labels=state.cats.map(c=>c.nombre);
-  const bud=state.cats.map(c=>Math.round(catTotals(c).budget));
-  const real=state.cats.map(c=>Math.round(catTotals(c).real));
+  const labels=(state.cats||[]).map(c=>c.nombre);
+  const bud=(state.cats||[]).map(c=>Math.round(catTotals(c).budget));
+  const real=(state.cats||[]).map(c=>Math.round(catTotals(c).real));
   const ctx=document.getElementById('catChart');
   if(chart)chart.destroy();
   chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[
@@ -239,7 +243,7 @@ function renderChart(){
 
 function renderAlerts(){
   const box=document.getElementById('alerts');const out=[];
-  state.cats.forEach(c=>{const t=catTotals(c);if(t.budget>0){const d=t.real-t.budget;const p=Math.round(t.real/t.budget*100);
+  (state.cats||[]).forEach(c=>{const t=catTotals(c);if(t.budget>0){const d=t.real-t.budget;const p=Math.round(t.real/t.budget*100);
     if(d>0)out.push(`<div class="alert red"><b>${esc(c.nombre)}</b>&nbsp;excedida en ${fmt(d)} (${p}% del presupuesto)</div>`);
     else if(p>=90)out.push(`<div class="alert amber"><b>${esc(c.nombre)}</b>&nbsp;cerca del límite (${p}% ejecutado)</div>`);}});
   if(!out.length)out.push('<div class="alert green">Todo dentro del presupuesto.</div>');
@@ -250,14 +254,14 @@ function metricasVisible(){return document.getElementById('view-metricas').style
 
 function render(){
   const root=document.getElementById('cats');root.innerHTML='';
-  state.cats.forEach(cat=>{
+  (state.cats||[]).forEach(cat=>{
     const ct=catTotals(cat);const cdif=ct.budget-ct.real;
     const cd=document.createElement('div');cd.className='cat';
     const sec=document.createElement('div');
-    cat.subs.forEach(sub=>{
+    (cat.subs||[]).forEach(sub=>{
       let sb=0,sr=0;
       const sd=document.createElement('div');sd.className='sub';
-      const rows=sub.items.map(it=>{const cb=calcBudget(it);sb+=cb.temp;sr+=(+it.real||0);
+      const rows=(sub.items||[]).map(it=>{const cb=calcBudget(it);sb+=cb.temp;sr+=(+it.real||0);
         const dif=cb.temp-(+it.real||0);
         const opts=Object.entries(TIPOS).map(([k,l])=>`<option value="${k}"${it.tipo===k?' selected':''}>${l}</option>`).join('');
         return `<tr>
@@ -302,7 +306,7 @@ function showTab(name){
 
 function exportCSV(){
   let rows=[['Categoría','Subcategoría','Concepto','Tipo','Presupuesto unitario','Presupuesto temporada','Gasto real','Diferencia']];
-  state.cats.forEach(c=>c.subs.forEach(s=>s.items.forEach(it=>{const cb=calcBudget(it);
+  (state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);
     rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,Math.round(cb.temp),it.real,Math.round(cb.temp-(+it.real||0))]);})));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='presupuesto_programa.csv';a.click();
