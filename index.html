@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard de presupuesto — Programa de TV</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{--navy:#1f3864;--blue:#2a78d6;--blueL:#b5d4f4;--bg:#f4f6f9;--card:#fff;
+    --line:#e2e6ec;--muted:#6b7280;--green:#0f7a4d;--red:#c0392b;--amber:#b9770e;--soft:#eef3fa;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#1a1d23;font-size:14px;}
+  header{background:var(--navy);color:#fff;padding:16px 22px;display:flex;flex-wrap:wrap;align-items:center;gap:14px;justify-content:space-between;}
+  header h1{font-size:18px;margin:0;font-weight:600;flex:1;min-width:220px;}
+  .cfgs{display:flex;gap:12px;flex-wrap:wrap;}
+  .cfg{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);padding:8px 12px;border-radius:8px;}
+  .cfg label{font-size:13px;}
+  .cfg input{width:60px;padding:6px 8px;border:none;border-radius:6px;text-align:center;font-weight:700;font-size:15px;}
+  .wrap{max-width:1150px;margin:0 auto;padding:20px;}
+  button{font-family:inherit;font-size:13px;cursor:pointer;border-radius:7px;border:1px solid var(--line);background:#fff;padding:8px 14px;transition:.15s;}
+  button:hover{background:#f0f3f7;}
+  .btn-primary{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .btn-primary:hover{background:#1f63b8;}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--muted);padding:4px 8px;}
+  .btn-ghost:hover{background:#eee;color:var(--red);}
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px;}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:15px 16px;}
+  .stat .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .stat .val{font-size:23px;font-weight:700;margin-top:6px;color:var(--navy);}
+  .stat .sub{font-size:11px;color:var(--muted);margin-top:3px;}
+  .stat.real .val{color:var(--blue);}
+  .stat.dif.over .val{color:var(--red);}
+  .stat.dif.under .val{color:var(--green);}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:20px;}
+  .panel h2{font-size:14px;margin:0 0 14px;color:var(--navy);font-weight:700;}
+  .chart-box{position:relative;width:100%;height:340px;}
+  .legend{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-bottom:10px;}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
+  .alerts{display:flex;flex-direction:column;gap:8px;}
+  .alert{display:flex;align-items:center;gap:10px;border-radius:8px;padding:10px 12px;font-size:13px;}
+  .alert.red{background:#fdecea;color:var(--red);}
+  .alert.amber{background:#fef6e7;color:var(--amber);}
+  .alert.green{background:#eafaf1;color:var(--green);}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+  .cat{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden;}
+  .cat-head{display:flex;align-items:center;gap:10px;padding:11px 16px;background:var(--soft);border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .cat-head input.name{font-size:15px;font-weight:700;color:var(--navy);border:1px solid transparent;background:transparent;padding:5px 8px;border-radius:6px;flex:1;min-width:120px;}
+  .cat-head input.name:hover,.cat-head input.name:focus{border-color:var(--line);background:#fff;outline:none;}
+  .cat-tot{font-size:12px;color:var(--muted);white-space:nowrap;}
+  .cat-tot b{color:var(--navy);} .cat-tot .over{color:var(--red);} .cat-tot .under{color:var(--green);}
+  .sub{border-bottom:1px solid var(--line);padding:6px 16px 12px;}
+  .sub:last-child{border-bottom:none;}
+  .sub-head{display:flex;align-items:center;gap:8px;margin:8px 0 4px;}
+  .sub-head input.name{font-size:13px;font-weight:700;border:1px solid transparent;background:transparent;padding:4px 6px;border-radius:6px;flex:1;min-width:100px;color:#374151;}
+  .sub-head input.name:hover,.sub-head input.name:focus{border-color:var(--line);background:#fff;outline:none;}
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.02em;color:var(--muted);text-align:left;padding:5px 7px;border-bottom:1px solid var(--line);font-weight:600;}
+  th.num,td.num{text-align:right;}
+  td{padding:3px 7px;border-bottom:1px solid #f0f2f5;}
+  td input,td select{width:100%;padding:6px 7px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:13px;background:#fff;}
+  td input.val{text-align:right;}
+  td.calc{font-variant-numeric:tabular-nums;white-space:nowrap;}
+  .dif-pos{color:var(--green);} .dif-neg{color:var(--red);}
+  .sub-foot{font-size:12px;color:var(--muted);text-align:right;padding:5px 7px 2px;}
+  .sub-foot b{color:#374151;}
+  .col-name{width:26%;}.col-tipo{width:15%;}.col-val{width:13%;}
+  footer{max-width:1150px;margin:6px auto 40px;padding:0 20px;color:var(--muted);font-size:12px;}
+  @media(max-width:700px){.hide{display:none;}}
+  @media print{.toolbar,.btn-ghost{display:none;}button{display:none;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dashboard de presupuesto — Programa de TV</h1>
+  <div class="cfgs">
+    <div class="cfg"><label for="caps">Capítulos</label><input id="caps" type="number" min="1" value="8"></div>
+    <div class="cfg"><label for="meses">Meses</label><input id="meses" type="number" min="1" value="3"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="summary" id="kpis"></div>
+
+  <div class="panel">
+    <h2>Presupuesto vs. gasto real por categoría (temporada)</h2>
+    <div class="legend">
+      <span><span class="swatch" style="background:#b5d4f4"></span>Presupuesto</span>
+      <span><span class="swatch" style="background:#2a78d6"></span>Gasto real</span>
+    </div>
+    <div class="chart-box"><canvas id="catChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h2>Alertas</h2>
+    <div class="alerts" id="alerts"></div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn-primary" onclick="addCat()">+ Agregar categoría</button>
+    <button onclick="exportCSV()">Exportar CSV</button>
+    <button onclick="window.print()">Imprimir / PDF</button>
+    <button onclick="resetAll()">Reiniciar</button>
+  </div>
+
+  <div id="cats"></div>
+</div>
+
+<footer>
+  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b> (total a la fecha). El dashboard y los totales se actualizan solos. Los datos se guardan en este navegador.
+</footer>
+
+<script>
+const fmt=n=>(n<0?'-':'')+'$'+Math.round(Math.abs(n)).toLocaleString('en-US');
+const TIPOS={capitulo:'Por capítulo',mensual:'Mensual',total:'Total temporada'};
+let uid=1; const nid=()=>'x'+(uid++);
+
+function seed(){
+  const C=(nombre,subs)=>({id:nid(),nombre,subs:subs.map(([sn,items])=>({id:nid(),nombre:sn,items:items.map(([n,t,v,r])=>({id:nid(),nombre:n,tipo:t,valor:v,real:r}))}))});
+  return {caps:8,meses:3,cats:[
+    C('Producción',[
+      ['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],
+      ['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],
+      ['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],
+      ['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]],
+    ]),
+    C('Equipo técnico',[
+      ['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],
+      ['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],
+      ['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]],
+    ]),
+    C('Famosos',[
+      ['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],
+      ['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]],
+    ]),
+    C('Edición',[
+      ['Edición',[['Editor principal','capitulo',4000,32000],['Asistente de edición','capitulo',1800,14400]]],
+      ['Post de audio',[['Mezcla y post de audio','capitulo',2600,21000],['Música y licencias','total',18000,16500]]],
+      ['Gráficos',[['Motion graphics','capitulo',1500,12000]]],
+    ]),
+    C('Arte y vestuario',[
+      ['Vestuario',[['Diseño de vestuario','capitulo',2200,18000],['Compra de vestuario','total',9000,8200]]],
+      ['Arte',[['Arte o ambientador','capitulo',2000,16000],['Utilería y escenografía','total',14000,15800]]],
+      ['Maquillaje',[['Maquillaje y peinado','capitulo',1600,12800]]],
+    ]),
+    C('Alimentación',[
+      ['Equipo',[['Catering equipo','capitulo',1200,10200]]],
+      ['Participantes',[['Comidas participantes','capitulo',800,7400]]],
+      ['Bebidas y snacks',[['Bebidas y snacks set','capitulo',300,2600]]],
+    ]),
+    C('Transporte',[
+      ['Traslados',[['Traslado en van','capitulo',1500,12000],['Combustible','mensual',900,2700]]],
+      ['Logística',[['Renta de van adicional','mensual',1800,5400]]],
+    ]),
+    C('Premio',[
+      ['Ganador',[['Premio en efectivo','total',40000,40000]]],
+      ['Otros premios',[['Premios por episodio','capitulo',1000,8000]]],
+    ]),
+  ]};
+}
+
+let state, chart;
+function load(){
+  try{const s=localStorage.getItem('dashTV2');if(s){state=JSON.parse(s);if(!state.meses)state.meses=3;
+    let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};
+    state.cats.forEach(c=>{sc(c);c.subs.forEach(s=>{sc(s);s.items.forEach(sc);});});uid=mx+1;return;}}catch(e){}
+  state=seed();
+}
+function save(){try{localStorage.setItem('dashTV2',JSON.stringify(state));}catch(e){}}
+
+function calcBudget(it){const caps=state.caps||1,meses=state.meses||1,v=+it.valor||0;
+  if(it.tipo==='total')return{cap:v/caps,temp:v};
+  if(it.tipo==='mensual')return{cap:(v*meses)/caps,temp:v*meses};
+  return{cap:v,temp:v*caps};}
+
+function catById(id){return state.cats.find(c=>c.id===id);}
+function subById(c,id){return c.subs.find(s=>s.id===id);}
+function addCat(){state.cats.push({id:nid(),nombre:'Nueva categoría',subs:[]});save();render();}
+function delCat(id){state.cats=state.cats.filter(c=>c.id!==id);save();render();}
+function addSub(cid){catById(cid).subs.push({id:nid(),nombre:'Nueva subcategoría',items:[]});save();render();}
+function delSub(cid,sid){const c=catById(cid);c.subs=c.subs.filter(s=>s.id!==sid);save();render();}
+function addItem(cid,sid){subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,real:0});save();render();}
+function delItem(cid,sid,iid){const s=subById(catById(cid),sid);s.items=s.items.filter(i=>i.id!==iid);save();render();}
+function upd(cid,sid,iid,f,v){const c=catById(cid);
+  if(f==='catname'){c.nombre=v;save();renderChart();renderAlerts();return;}
+  const s=subById(c,sid);
+  if(f==='subname'){s.nombre=v;save();return;}
+  const it=s.items.find(i=>i.id===iid);
+  if(f==='nombre')it.nombre=v;
+  else if(f==='tipo'){it.tipo=v;save();render();return;}
+  else if(f==='valor'){it.valor=parseFloat(v)||0;save();render();return;}
+  else if(f==='real'){it.real=parseFloat(v)||0;save();render();return;}
+  save();
+}
+
+function catTotals(cat){let b=0,r=0,bc=0;cat.subs.forEach(s=>s.items.forEach(it=>{const cb=calcBudget(it);b+=cb.temp;bc+=cb.cap;r+=(+it.real||0);}));return{budget:b,real:r,budgetCap:bc};}
+function grand(){let b=0,r=0,bc=0;state.cats.forEach(c=>{const t=catTotals(c);b+=t.budget;r+=t.real;bc+=t.budgetCap;});return{budget:b,real:r,budgetCap:bc};}
+
+function renderKPIs(){
+  const g=grand();const dif=g.budget-g.real;const pct=g.budget?Math.round(g.real/g.budget*100):0;
+  const over=dif<0;
+  document.getElementById('kpis').innerHTML=`
+    <div class="stat"><div class="lbl">Presupuesto temporada</div><div class="val">${fmt(g.budget)}</div></div>
+    <div class="stat real"><div class="lbl">Gasto real</div><div class="val">${fmt(g.real)}</div><div class="sub">${pct}% del presupuesto</div></div>
+    <div class="stat dif ${over?'over':'under'}"><div class="lbl">${over?'Sobregiro':'Disponible'}</div><div class="val">${fmt(Math.abs(dif))}</div></div>
+    <div class="stat"><div class="lbl">Presupuesto por capítulo</div><div class="val">${fmt(g.budgetCap)}</div></div>`;
+}
+
+function renderChart(){
+  const labels=state.cats.map(c=>c.nombre);
+  const bud=state.cats.map(c=>Math.round(catTotals(c).budget));
+  const real=state.cats.map(c=>Math.round(catTotals(c).real));
+  const ctx=document.getElementById('catChart');
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[
+    {label:'Presupuesto',data:bud,backgroundColor:'#b5d4f4',borderRadius:4},
+    {label:'Gasto real',data:real,backgroundColor:'#2a78d6',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},
+      scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b7280'},grid:{color:'#eef0f3'}},x:{ticks:{color:'#6b7280',maxRotation:45,minRotation:0},grid:{display:false}}}}});
+}
+
+function renderAlerts(){
+  const box=document.getElementById('alerts');const out=[];
+  state.cats.forEach(c=>{const t=catTotals(c);if(t.budget>0){const d=t.real-t.budget;const p=Math.round(t.real/t.budget*100);
+    if(d>0)out.push(`<div class="alert red"><b>${esc(c.nombre)}</b>&nbsp;excedida en ${fmt(d)} (${p}% del presupuesto)</div>`);
+    else if(p>=90)out.push(`<div class="alert amber"><b>${esc(c.nombre)}</b>&nbsp;cerca del límite (${p}% ejecutado)</div>`);}});
+  if(!out.length)out.push('<div class="alert green">Todo dentro del presupuesto.</div>');
+  box.innerHTML=out.join('');
+}
+
+function render(){
+  const root=document.getElementById('cats');root.innerHTML='';
+  state.cats.forEach(cat=>{
+    const ct=catTotals(cat);const cdif=ct.budget-ct.real;
+    const cd=document.createElement('div');cd.className='cat';
+    const sec=document.createElement('div');
+    cat.subs.forEach(sub=>{
+      let sb=0,sr=0;
+      const sd=document.createElement('div');sd.className='sub';
+      const rows=sub.items.map(it=>{const cb=calcBudget(it);sb+=cb.temp;sr+=(+it.real||0);
+        const dif=cb.temp-(+it.real||0);
+        const opts=Object.entries(TIPOS).map(([k,l])=>`<option value="${k}"${it.tipo===k?' selected':''}>${l}</option>`).join('');
+        return `<tr>
+          <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
+          <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
+          <td class="col-val"><input class="val" type="number" value="${it.valor}" oninput="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
+          <td class="num calc hide">${fmt(cb.temp)}</td>
+          <td class="col-val"><input class="val" type="number" value="${it.real}" oninput="upd('${cat.id}','${sub.id}','${it.id}','real',this.value)"></td>
+          <td class="num calc ${dif<0?'dif-neg':'dif-pos'}">${fmt(dif)}</td>
+          <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
+        </tr>`;}).join('');
+      const sdif=sb-sr;
+      sd.innerHTML=`
+        <div class="sub-head"><input class="name" value="${esc(sub.nombre)}" oninput="upd('${cat.id}','${sub.id}',null,'subname',this.value)">
+          <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
+        <table><thead><tr>
+          <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Presupuesto</th>
+          <th class="num hide">Total temp.</th><th class="num col-val">Gasto real</th><th class="num">Dif.</th><th></th>
+        </tr></thead><tbody>${rows}</tbody></table>
+        <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
+        <div class="sub-foot">Presupuesto <b>${fmt(sb)}</b> · Real <b>${fmt(sr)}</b> · Dif. <b class="${sdif<0?'dif-neg':'dif-pos'}">${fmt(sdif)}</b></div>`;
+      sec.appendChild(sd);
+    });
+    cd.innerHTML=`<div class="cat-head">
+        <input class="name" value="${esc(cat.nombre)}" oninput="upd('${cat.id}',null,null,'catname',this.value)">
+        <span class="cat-tot">Pres. <b>${fmt(ct.budget)}</b> · Real <b>${fmt(ct.real)}</b> · Dif. <b class="${cdif<0?'over':'under'}">${fmt(cdif)}</b></span>
+        <button onclick="addSub('${cat.id}')">+ Subcategoría</button>
+        <button class="btn-ghost" onclick="delCat('${cat.id}')">Eliminar</button></div>`;
+    cd.appendChild(sec);root.appendChild(cd);
+  });
+  renderKPIs();renderChart();renderAlerts();
+}
+function esc(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function exportCSV(){
+  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Presupuesto unitario','Presupuesto temporada','Gasto real','Diferencia']];
+  state.cats.forEach(c=>c.subs.forEach(s=>s.items.forEach(it=>{const cb=calcBudget(it);
+    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,Math.round(cb.temp),it.real,Math.round(cb.temp-(+it.real||0))]);})));
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='presupuesto_programa.csv';a.click();
+}
+function resetAll(){if(confirm('¿Borrar todo y empezar de cero?')){state=seed();save();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();}}
+
+document.getElementById('caps').addEventListener('input',e=>{state.caps=parseInt(e.target.value)||1;save();render();});
+document.getElementById('meses').addEventListener('input',e=>{state.meses=parseInt(e.target.value)||1;save();render();});
+load();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();
+</script>
+</body>
+</html>
