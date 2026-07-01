@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <style>
   :root{--navy:#1f3864;--blue:#2a78d6;--blueL:#b5d4f4;--bg:#f4f6f9;--card:#fff;
     --line:#e2e6ec;--muted:#6b7280;--green:#0f7a4d;--red:#c0392b;--amber:#b9770e;--soft:#eef3fa;}
@@ -96,6 +97,15 @@
 </style>
 </head>
 <body>
+<div id="login" style="position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:30px 26px;width:300px;max-width:100%;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.10);">
+    <div style="width:46px;height:46px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;">🔒</div>
+    <h2 style="margin:0 0 4px;font-size:17px;color:var(--navy);font-weight:600;">Dashboard de presupuesto</h2>
+    <p style="margin:0 0 18px;font-size:13px;color:var(--muted);">Acceso solo para el equipo</p>
+    <button onclick="doLogin()" class="btn-primary" style="width:100%;padding:11px;font-size:15px;">Entrar con Google</button>
+    <div id="loginErr" style="color:var(--red);font-size:12px;min-height:16px;margin-top:10px;"></div>
+  </div>
+</div>
 <header>
   <h1>Dashboard de presupuesto — Programa de TV</h1>
   <div class="cfgs">
@@ -109,7 +119,7 @@
     <button class="tab active" id="tab-btn-planilla" onclick="showTab('planilla')">Planilla</button>
     <button class="tab" id="tab-btn-metricas" onclick="showTab('metricas')">Métricas</button>
   </div>
-  <span class="savep" id="saveState"><span class="dot">●</span> Guardado automáticamente</span>
+  <span class="savep"><span id="saveState"><span class="dot">●</span> Guardado automáticamente</span> &nbsp;·&nbsp; <a href="#" onclick="doLogout();return false;" style="color:var(--muted);text-decoration:underline;">Salir</a></span>
 </div>
 
 <div class="wrap">
@@ -173,9 +183,20 @@ function updateSaveLabel(){const el=document.getElementById('saveState');if(!el)
 function pushNow(){if(!dbRef)return;try{lastPushed=JSON.stringify(state);dbRef.set(JSON.parse(lastPushed)).catch(()=>{});}catch(e){}}
 function applyRemote(v){if(!v)return;const nv=normalize(JSON.parse(JSON.stringify(v)));const inc=JSON.stringify(nv);if(inc===JSON.stringify(state))return;state=nv;fixUid();
   const cEl=document.getElementById('caps'),mEl=document.getElementById('meses');if(cEl)cEl.value=state.caps;if(mEl)mEl.value=state.meses;render();}
-function initFirebase(){try{firebase.initializeApp(FB_CONFIG);dbRef=firebase.database().ref('presupuesto');
+const ALLOWED=['dlopezok@gmail.com','anvargasok@gmail.com'];
+let dbAttached=false;
+function attachDb(){if(dbAttached)return;dbAttached=true;dbRef=firebase.database().ref('presupuesto');
   dbRef.on('value',snap=>{const v=snap.val();if(v){applyRemote(v);}else{pushNow();}updateSaveLabel();});
-  firebase.database().ref('.info/connected').on('value',s=>{online=!!s.val();updateSaveLabel();});
+  firebase.database().ref('.info/connected').on('value',s=>{online=!!s.val();updateSaveLabel();});}
+function doLogin(){const err=document.getElementById('loginErr');if(err)err.textContent='';
+  const p=new firebase.auth.GoogleAuthProvider();
+  firebase.auth().signInWithPopup(p).catch(()=>{if(err)err.textContent='No se pudo iniciar sesión. Intenta de nuevo.';});}
+function doLogout(){try{firebase.auth().signOut();}catch(e){}location.reload();}
+function initFirebase(){try{firebase.initializeApp(FB_CONFIG);
+  firebase.auth().onAuthStateChanged(u=>{const lg=document.getElementById('login');const err=document.getElementById('loginErr');
+    if(u){if(ALLOWED.length && !ALLOWED.includes((u.email||'').toLowerCase())){if(err)err.textContent='La cuenta '+(u.email||'')+' no tiene acceso.';firebase.auth().signOut();if(lg)lg.style.display='flex';return;}
+      if(lg)lg.style.display='none';attachDb();}
+    else{if(lg)lg.style.display='flex';}});
 }catch(e){updateSaveLabel();}}
 function save(){try{localStorage.setItem('dashTV3',JSON.stringify(state));}catch(e){}
   if(dbRef){clearTimeout(saveTimer);saveTimer=setTimeout(pushNow,250);}
