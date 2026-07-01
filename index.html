@@ -222,7 +222,7 @@ function upd(cid,sid,iid,f,v){const c=catById(cid);
   const it=s.items.find(i=>i.id===iid);
   if(f==='nombre'){it.nombre=v;save();return;}
   else if(f==='tipo'){it.tipo=v;save();render();return;}
-  else if(f==='valor'){it.valor=parseFloat(v)||0;save();render();return;}
+  else if(f==='valor'){it.valor=Number(String(v).replace(/[^0-9]/g,''))||0;save();render();return;}
   else if(f==='real'){it.real=parseFloat(v)||0;save();render();return;}
   save();
 }
@@ -268,7 +268,7 @@ function render(){
         return `<tr>
           <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
-          <td class="col-val"><input class="val" type="number" value="${it.valor}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
+          <td class="col-val"><input class="val" type="text" inputmode="numeric" value="${fmt(it.valor)}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
           <td class="num calc">${fmt(cb.temp)}</td>
           <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
         </tr>`;}).join('');
