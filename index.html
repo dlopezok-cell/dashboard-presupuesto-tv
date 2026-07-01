@@ -126,22 +126,14 @@
   <div id="view-metricas" style="display:none">
     <div class="summary" id="kpis"></div>
     <div class="panel">
-      <h2>Presupuesto vs. gasto real por categoría (temporada)</h2>
-      <div class="legend">
-        <span><span class="swatch" style="background:#b5d4f4"></span>Presupuesto</span>
-        <span><span class="swatch" style="background:#2a78d6"></span>Gasto real</span>
-      </div>
+      <h2>Valor por categoría (temporada)</h2>
       <div class="chart-box"><canvas id="catChart"></canvas></div>
-    </div>
-    <div class="panel">
-      <h2>Alertas</h2>
-      <div class="alerts" id="alerts"></div>
     </div>
   </div>
 </div>
 
 <footer>
-  En cada línea marca si el valor presupuestado es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y registra el <b>gasto real</b>. Escribe el número y al salir del campo (clic afuera o Enter) se recalcula todo. Las métricas están en la pestaña "Métricas". Montos en pesos chilenos (CLP). Los cambios se guardan y sincronizan en la nube en tiempo real para todos los que tengan el enlace.
+  En cada línea marca si el valor es <b>por capítulo</b>, <b>mensual</b> o <b>total temporada</b>, y escribe el monto. Al salir del campo (clic afuera o Enter) se recalcula todo. Las métricas están en la pestaña "Métricas". Montos en pesos chilenos (CLP). Los cambios se guardan y sincronizan en la nube en tiempo real para todos los que tengan el enlace.
 </footer>
 
 <script>
@@ -218,81 +210,66 @@ function catTotals(cat){let b=0,r=0,bc=0;(cat.subs||[]).forEach(s=>(s.items||[])
 function grand(){let b=0,r=0,bc=0;(state.cats||[]).forEach(c=>{const t=catTotals(c);b+=t.budget;r+=t.real;bc+=t.budgetCap;});return{budget:b,real:r,budgetCap:bc};}
 
 function renderKPIs(){
-  const g=grand();const dif=g.budget-g.real;const pct=g.budget?Math.round(g.real/g.budget*100):0;
-  const over=dif<0;
+  const g=grand();
   document.getElementById('kpis').innerHTML=`
-    <div class="stat"><div class="lbl">Presupuesto temporada</div><div class="val">${fmt(g.budget)}</div></div>
-    <div class="stat real"><div class="lbl">Gasto real</div><div class="val">${fmt(g.real)}</div><div class="sub">${pct}% del presupuesto</div></div>
-    <div class="stat dif ${over?'over':'under'}"><div class="lbl">${over?'Sobregiro':'Disponible'}</div><div class="val">${fmt(Math.abs(dif))}</div></div>
-    <div class="stat"><div class="lbl">Presupuesto por capítulo</div><div class="val">${fmt(g.budgetCap)}</div></div>`;
+    <div class="stat"><div class="lbl">Valor total temporada</div><div class="val">${fmt(g.budget)}</div></div>
+    <div class="stat"><div class="lbl">Valor por capítulo</div><div class="val">${fmt(g.budgetCap)}</div></div>
+    <div class="stat"><div class="lbl">Categorías</div><div class="val">${(state.cats||[]).length}</div></div>`;
 }
 
 function renderChart(){
   const labels=(state.cats||[]).map(c=>c.nombre);
   const bud=(state.cats||[]).map(c=>Math.round(catTotals(c).budget));
-  const real=(state.cats||[]).map(c=>Math.round(catTotals(c).real));
   const ctx=document.getElementById('catChart');
   if(chart)chart.destroy();
   chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[
-    {label:'Presupuesto',data:bud,backgroundColor:'#b5d4f4',borderRadius:4},
-    {label:'Gasto real',data:real,backgroundColor:'#2a78d6',borderRadius:4}]},
+    {label:'Valor',data:bud,backgroundColor:'#2a78d6',borderRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmt(c.parsed.y)}}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'Valor: '+fmt(c.parsed.y)}}},
       scales:{y:{ticks:{callback:v=>fmt(v),color:'#6b7280'},grid:{color:'#eef0f3'}},x:{ticks:{color:'#6b7280',maxRotation:45,minRotation:0},grid:{display:false}}}}});
 }
 
-function renderAlerts(){
-  const box=document.getElementById('alerts');const out=[];
-  (state.cats||[]).forEach(c=>{const t=catTotals(c);if(t.budget>0){const d=t.real-t.budget;const p=Math.round(t.real/t.budget*100);
-    if(d>0)out.push(`<div class="alert red"><b>${esc(c.nombre)}</b>&nbsp;excedida en ${fmt(d)} (${p}% del presupuesto)</div>`);
-    else if(p>=90)out.push(`<div class="alert amber"><b>${esc(c.nombre)}</b>&nbsp;cerca del límite (${p}% ejecutado)</div>`);}});
-  if(!out.length)out.push('<div class="alert green">Todo dentro del presupuesto.</div>');
-  box.innerHTML=out.join('');
-}
+function renderAlerts(){const box=document.getElementById('alerts');if(box)box.innerHTML='';}
 
 function metricasVisible(){return document.getElementById('view-metricas').style.display!=='none';}
 
 function render(){
   const root=document.getElementById('cats');root.innerHTML='';
   (state.cats||[]).forEach(cat=>{
-    const ct=catTotals(cat);const cdif=ct.budget-ct.real;
+    const ct=catTotals(cat);
     const cd=document.createElement('div');cd.className='cat';
     const sec=document.createElement('div');
     (cat.subs||[]).forEach(sub=>{
-      let sb=0,sr=0;
+      let sb=0;
       const sd=document.createElement('div');sd.className='sub';
-      const rows=(sub.items||[]).map(it=>{const cb=calcBudget(it);sb+=cb.temp;sr+=(+it.real||0);
-        const dif=cb.temp-(+it.real||0);
+      const rows=(sub.items||[]).map(it=>{const cb=calcBudget(it);sb+=cb.temp;
         const opts=Object.entries(TIPOS).map(([k,l])=>`<option value="${k}"${it.tipo===k?' selected':''}>${l}</option>`).join('');
         return `<tr>
           <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
           <td class="col-val"><input class="val" type="number" value="${it.valor}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
-          <td class="num calc hide">${fmt(cb.temp)}</td>
-          <td class="col-val"><input class="val" type="number" value="${it.real}" onchange="upd('${cat.id}','${sub.id}','${it.id}','real',this.value)"></td>
-          <td class="num calc ${dif<0?'dif-neg':'dif-pos'}">${fmt(dif)}</td>
+          <td class="num calc">${fmt(cb.temp)}</td>
           <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
         </tr>`;}).join('');
-      const sdif=sb-sr;
       sd.innerHTML=`
         <div class="sub-head"><input class="name" value="${esc(sub.nombre)}" oninput="upd('${cat.id}','${sub.id}',null,'subname',this.value)">
           <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
         <div class="tbl-wrap"><table><thead><tr>
-          <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Presupuesto</th>
-          <th class="num hide">Total temp.</th><th class="num col-val">Gasto real</th><th class="num">Dif.</th><th></th>
+          <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Valor</th>
+          <th class="num">Total temp.</th><th></th>
         </tr></thead><tbody>${rows}</tbody></table></div>
         <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
-        <div class="sub-foot">Presupuesto <b>${fmt(sb)}</b> · Real <b>${fmt(sr)}</b> · Dif. <b class="${sdif<0?'dif-neg':'dif-pos'}">${fmt(sdif)}</b></div>`;
+        <div class="sub-foot">Valor total: <b>${fmt(sb)}</b></div>`;
       sec.appendChild(sd);
     });
     cd.innerHTML=`<div class="cat-head">
         <input class="name" value="${esc(cat.nombre)}" oninput="upd('${cat.id}',null,null,'catname',this.value)">
-        <span class="cat-tot">Pres. <b>${fmt(ct.budget)}</b> · Real <b>${fmt(ct.real)}</b> · Dif. <b class="${cdif<0?'over':'under'}">${fmt(cdif)}</b></span>
+        <span class="cat-tot">Valor total: <b>${fmt(ct.budget)}</b></span>
         <button onclick="addSub('${cat.id}')">+ Subcategoría</button>
         <button class="btn-ghost" onclick="delCat('${cat.id}')">Eliminar</button></div>`;
     cd.appendChild(sec);root.appendChild(cd);
   });
-  renderKPIs();renderAlerts();if(metricasVisible())renderChart();
+  renderKPIs();if(metricasVisible())renderChart();
 }
 function esc(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
@@ -301,13 +278,13 @@ function showTab(name){
   document.getElementById('view-metricas').style.display=name==='metricas'?'':'none';
   document.getElementById('tab-btn-planilla').classList.toggle('active',name==='planilla');
   document.getElementById('tab-btn-metricas').classList.toggle('active',name==='metricas');
-  if(name==='metricas'){renderKPIs();renderAlerts();renderChart();}
+  if(name==='metricas'){renderKPIs();renderChart();}
 }
 
 function exportCSV(){
-  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Presupuesto unitario','Presupuesto temporada','Gasto real','Diferencia']];
+  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Valor unitario','Valor temporada']];
   (state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);
-    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,Math.round(cb.temp),it.real,Math.round(cb.temp-(+it.real||0))]);})));
+    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,Math.round(cb.temp)]);})));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='presupuesto_programa.csv';a.click();
 }
