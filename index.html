@@ -73,9 +73,9 @@
   .dif-pos{color:var(--green);} .dif-neg{color:var(--red);}
   .sub-foot{font-size:12px;color:var(--muted);text-align:right;padding:5px 7px 2px;}
   .sub-foot b{color:#374151;}
-  .col-name{width:26%;}.col-tipo{width:15%;}.col-val{width:13%;}
+  .col-name{width:24%;}.col-tipo{width:14%;}.col-val{width:12%;}.col-cant{width:9%;}
   .tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .tbl-wrap table{min-width:560px;}
+  .tbl-wrap table{min-width:720px;}
   footer{max-width:1150px;margin:6px auto 40px;padding:0 20px;color:var(--muted);font-size:12px;}
   @media(max-width:700px){.hide{display:none;}}
   @media(max-width:600px){
@@ -111,6 +111,8 @@
   <div class="cfgs">
     <div class="cfg"><label for="caps">Capítulos</label><input id="caps" type="number" min="1" value="8"></div>
     <div class="cfg"><label for="meses">Meses</label><input id="meses" type="number" min="1" value="3"></div>
+    <div class="cfg"><label for="ivaF">IVA Factura %</label><input id="ivaF" type="number" min="0" step="0.01" value="19"></div>
+    <div class="cfg"><label for="ivaB">Boleta %</label><input id="ivaB" type="number" min="0" step="0.01" value="15.25"></div>
   </div>
 </header>
 
@@ -150,11 +152,12 @@
 const nf=new Intl.NumberFormat('es-CL',{maximumFractionDigits:0});
 const fmt=n=>(n<0?'-':'')+'$'+nf.format(Math.round(Math.abs(n)));
 const TIPOS={capitulo:'Por capítulo',mensual:'Mensual',total:'Total temporada'};
+const IMPS={factura:'Factura',boleta:'Boleta',exento:'Exento'};
 let uid=1; const nid=()=>'x'+(uid++);
 
 function seed(){
   const C=(nombre,subs)=>({id:nid(),nombre,subs:subs.map(([sn,items])=>({id:nid(),nombre:sn,items:items.map(([n,t,v,r])=>({id:nid(),nombre:n,tipo:t,valor:v,real:r}))}))});
-  return {caps:8,meses:3,cats:[
+  return {caps:8,meses:3,ivaF:19,ivaB:15.25,cats:[
     C('Producción',[['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]]]),
     C('Equipo técnico',[['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]]]),
     C('Famosos',[['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]]]),
@@ -170,8 +173,8 @@ const FB_CONFIG={apiKey:"AIzaSyDP3PtRrIBmdi3S2DooQIu10pcy-Jk1zIo",authDomain:"pr
 let state, chart, dbRef=null, online=false, saveTimer=null, lastPushed='';
 function toArr(x){if(Array.isArray(x))return x.filter(e=>e!=null);if(x&&typeof x==='object')return Object.keys(x).sort((a,b)=>a-b).map(k=>x[k]).filter(e=>e!=null);return [];}
 function normalize(s){if(!s||typeof s!=='object')return seed();
-  s.cats=toArr(s.cats).map(c=>{c=c||{};if(!c.id)c.id=nid();if(c.nombre==null)c.nombre='';c.subs=toArr(c.subs).map(sub=>{sub=sub||{};if(!sub.id)sub.id=nid();if(sub.nombre==null)sub.nombre='';sub.items=toArr(sub.items).map(it=>{it=it||{};if(!it.id)it.id=nid();if(it.nombre==null)it.nombre='';if(!it.tipo)it.tipo='capitulo';it.valor=+it.valor||0;it.real=+it.real||0;return it;});return sub;});return c;});
-  s.caps=parseInt(s.caps)||8;s.meses=parseInt(s.meses)||3;return s;}
+  s.cats=toArr(s.cats).map(c=>{c=c||{};if(!c.id)c.id=nid();if(c.nombre==null)c.nombre='';c.subs=toArr(c.subs).map(sub=>{sub=sub||{};if(!sub.id)sub.id=nid();if(sub.nombre==null)sub.nombre='';sub.items=toArr(sub.items).map(it=>{it=it||{};if(!it.id)it.id=nid();if(it.nombre==null)it.nombre='';if(!it.tipo)it.tipo='capitulo';it.valor=+it.valor||0;if(!it.imp)it.imp='exento';return it;});return sub;});return c;});
+  s.caps=parseInt(s.caps)||8;s.meses=parseInt(s.meses)||3;s.ivaF=(s.ivaF==null?19:+s.ivaF);s.ivaB=(s.ivaB==null?15.25:+s.ivaB);return s;}
 function fixUid(){let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};(state.cats||[]).forEach(c=>{sc(c);(c.subs||[]).forEach(s=>{sc(s);(s.items||[]).forEach(sc);});});uid=mx+1;}
 function load(){
   try{const s=localStorage.getItem('dashTV3');if(s){state=normalize(JSON.parse(s));fixUid();return;}}catch(e){}
@@ -181,8 +184,7 @@ function updateSaveLabel(){const el=document.getElementById('saveState');if(!el)
   if(dbRef){el.innerHTML='<span class="dot" style="color:'+(online?'var(--green)':'#b9770e')+'">●</span> '+(online?'En vivo · sincronizado':'Reconectando…');}
   else{el.innerHTML='<span class="dot">●</span> Guardado en este equipo';}}
 function pushNow(){if(!dbRef)return;try{lastPushed=JSON.stringify(state);dbRef.set(JSON.parse(lastPushed)).catch(()=>{});}catch(e){}}
-function applyRemote(v){if(!v)return;const nv=normalize(JSON.parse(JSON.stringify(v)));const inc=JSON.stringify(nv);if(inc===JSON.stringify(state))return;state=nv;fixUid();
-  const cEl=document.getElementById('caps'),mEl=document.getElementById('meses');if(cEl)cEl.value=state.caps;if(mEl)mEl.value=state.meses;render();}
+function applyRemote(v){if(!v)return;const nv=normalize(JSON.parse(JSON.stringify(v)));const inc=JSON.stringify(nv);if(inc===JSON.stringify(state))return;state=nv;fixUid();setCfgInputs();render();}
 const ALLOWED=['dlopezok@gmail.com','anvargasok@gmail.com'];
 let dbAttached=false;
 function attachDb(){if(dbAttached)return;dbAttached=true;dbRef=firebase.database().ref('presupuesto');
@@ -202,10 +204,10 @@ function save(){try{localStorage.setItem('dashTV3',JSON.stringify(state));}catch
   if(dbRef){clearTimeout(saveTimer);saveTimer=setTimeout(pushNow,250);}
   updateSaveLabel();}
 
-function calcBudget(it){const caps=state.caps||1,meses=state.meses||1,v=+it.valor||0;
-  if(it.tipo==='total')return{cap:v/caps,temp:v};
-  if(it.tipo==='mensual')return{cap:(v*meses)/caps,temp:v*meses};
-  return{cap:v,temp:v*caps};}
+function defCant(it){if(it.tipo==='mensual')return state.meses||1;if(it.tipo==='total')return 1;return state.caps||1;}
+function itemCant(it){return (it.cant!=null&&it.cant!=='')?(+it.cant||0):defCant(it);}
+function rateOf(it){return it.imp==='factura'?(+state.ivaF||0):it.imp==='boleta'?(+state.ivaB||0):0;}
+function calcBudget(it){const v=+it.valor||0;const base=v*itemCant(it);const temp=base*(1+rateOf(it)/100);return{base:base,temp:temp};}
 
 function catById(id){return state.cats.find(c=>c.id===id);}
 function subById(c,id){return c.subs.find(s=>s.id===id);}
@@ -213,7 +215,7 @@ function addCat(){state.cats.push({id:nid(),nombre:'Nueva categoría',subs:[]});
 function delCat(id){state.cats=state.cats.filter(c=>c.id!==id);save();render();}
 function addSub(cid){catById(cid).subs.push({id:nid(),nombre:'Nueva subcategoría',items:[]});save();render();}
 function delSub(cid,sid){const c=catById(cid);c.subs=c.subs.filter(s=>s.id!==sid);save();render();}
-function addItem(cid,sid){subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,real:0});save();render();}
+function addItem(cid,sid){subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,imp:'exento'});save();render();}
 function delItem(cid,sid,iid){const s=subById(catById(cid),sid);s.items=s.items.filter(i=>i.id!==iid);save();render();}
 function upd(cid,sid,iid,f,v){const c=catById(cid);
   if(f==='catname'){c.nombre=v;save();return;}
@@ -221,19 +223,21 @@ function upd(cid,sid,iid,f,v){const c=catById(cid);
   if(f==='subname'){s.nombre=v;save();return;}
   const it=s.items.find(i=>i.id===iid);
   if(f==='nombre'){it.nombre=v;save();return;}
-  else if(f==='tipo'){it.tipo=v;save();render();return;}
+  else if(f==='tipo'){it.tipo=v;delete it.cant;save();render();return;}
   else if(f==='valor'){it.valor=Number(String(v).replace(/[^0-9]/g,''))||0;save();render();return;}
-  else if(f==='real'){it.real=parseFloat(v)||0;save();render();return;}
+  else if(f==='cant'){const n=String(v).replace(/[^0-9]/g,'');if(n==='')delete it.cant;else it.cant=+n;save();render();return;}
+  else if(f==='imp'){it.imp=v;save();render();return;}
   save();
 }
 
-function catTotals(cat){let b=0,r=0,bc=0;(cat.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);b+=cb.temp;bc+=cb.cap;r+=(+it.real||0);}));return{budget:b,real:r,budgetCap:bc};}
-function grand(){let b=0,r=0,bc=0;(state.cats||[]).forEach(c=>{const t=catTotals(c);b+=t.budget;r+=t.real;bc+=t.budgetCap;});return{budget:b,real:r,budgetCap:bc};}
+function catTotals(cat){let b=0;(cat.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{b+=calcBudget(it).temp;}));return{budget:b};}
+function grand(){let b=0,base=0;(state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);b+=cb.temp;base+=cb.base;})));return{budget:b,base:base,tax:b-base,budgetCap:b/(state.caps||1)};}
 
 function renderKPIs(){
   const g=grand();
   document.getElementById('kpis').innerHTML=`
     <div class="stat"><div class="lbl">Valor total temporada</div><div class="val">${fmt(g.budget)}</div></div>
+    <div class="stat"><div class="lbl">Impuestos incluidos</div><div class="val">${fmt(g.tax)}</div></div>
     <div class="stat"><div class="lbl">Valor por capítulo</div><div class="val">${fmt(g.budgetCap)}</div></div>
     <div class="stat"><div class="lbl">Categorías</div><div class="val">${(state.cats||[]).length}</div></div>`;
 }
@@ -265,10 +269,13 @@ function render(){
       const sd=document.createElement('div');sd.className='sub';
       const rows=(sub.items||[]).map(it=>{const cb=calcBudget(it);sb+=cb.temp;
         const opts=Object.entries(TIPOS).map(([k,l])=>`<option value="${k}"${it.tipo===k?' selected':''}>${l}</option>`).join('');
+        const impo=Object.entries(IMPS).map(([k,l])=>`<option value="${k}"${(it.imp||'exento')===k?' selected':''}>${l}</option>`).join('');
         return `<tr>
           <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
           <td class="col-val"><input class="val" type="text" inputmode="numeric" value="${fmt(it.valor)}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
+          <td class="col-cant"><input class="val" type="number" min="0" value="${itemCant(it)}" onchange="upd('${cat.id}','${sub.id}','${it.id}','cant',this.value)"></td>
+          <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','imp',this.value)">${impo}</select></td>
           <td class="num calc">${fmt(cb.temp)}</td>
           <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
         </tr>`;}).join('');
@@ -277,7 +284,7 @@ function render(){
           <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
         <div class="tbl-wrap"><table><thead><tr>
           <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Valor</th>
-          <th class="num">Total temp.</th><th></th>
+          <th class="num col-cant">Cant.</th><th class="col-tipo">Impuesto</th><th class="num">Total temp.</th><th></th>
         </tr></thead><tbody>${rows}</tbody></table></div>
         <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
         <div class="sub-foot">Valor total: <b>${fmt(sb)}</b></div>`;
@@ -303,17 +310,20 @@ function showTab(name){
 }
 
 function exportCSV(){
-  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Valor unitario','Valor temporada']];
+  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Valor unitario','Cantidad','Impuesto','Neto temporada','Total temporada']];
   (state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);
-    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,Math.round(cb.temp)]);})));
+    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,itemCant(it),IMPS[it.imp||'exento'],Math.round(cb.base),Math.round(cb.temp)]);})));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='presupuesto_programa.csv';a.click();
 }
-function resetAll(){if(confirm('¿Borrar todo y empezar de cero?')){state=seed();save();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();}}
+function setCfgInputs(){const g=(id,v)=>{const el=document.getElementById(id);if(el)el.value=v;};g('caps',state.caps);g('meses',state.meses);g('ivaF',state.ivaF);g('ivaB',state.ivaB);}
+function resetAll(){if(confirm('¿Borrar todo y empezar de cero?')){state=seed();save();setCfgInputs();render();}}
 
 document.getElementById('caps').addEventListener('change',e=>{state.caps=parseInt(e.target.value)||1;save();render();});
 document.getElementById('meses').addEventListener('change',e=>{state.meses=parseInt(e.target.value)||1;save();render();});
-load();document.getElementById('caps').value=state.caps;document.getElementById('meses').value=state.meses;render();initFirebase();
+document.getElementById('ivaF').addEventListener('change',e=>{state.ivaF=parseFloat(e.target.value)||0;save();render();});
+document.getElementById('ivaB').addEventListener('change',e=>{state.ivaB=parseFloat(e.target.value)||0;save();render();});
+load();setCfgInputs();render();initFirebase();
 </script>
 </body>
 </html>
