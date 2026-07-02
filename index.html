@@ -76,6 +76,24 @@
   .col-name{width:24%;}.col-tipo{width:14%;}.col-val{width:12%;}.col-cant{width:9%;}
   .tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
   .tbl-wrap table{min-width:720px;}
+  .gnote{font-size:13px;color:var(--muted);margin:0 0 14px;}
+  .gnote b{color:#374151;}
+  .gantt{border:1px solid var(--line);border-radius:12px;overflow-x:auto;background:#fff;}
+  .grid-head{display:grid;border-bottom:1px solid var(--line);background:var(--soft);position:sticky;top:0;}
+  .gmcell{font-size:10px;color:var(--muted);text-align:center;padding:7px 0;border-right:1px solid var(--line);text-transform:uppercase;letter-spacing:.03em;}
+  .gcat{font-size:11px;font-weight:700;color:var(--navy);background:var(--soft);padding:5px 12px;border-bottom:1px solid var(--line);}
+  .grow{display:grid;align-items:center;border-bottom:1px solid #f0f2f5;height:40px;}
+  .grow:last-child{border-bottom:none;}
+  .glabel{padding:0 12px;font-size:12px;color:#1a1d23;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line);height:100%;display:flex;align-items:center;}
+  .gtrack{position:relative;height:100%;}
+  .gcol{position:absolute;top:0;bottom:0;border-right:1px solid #f0f2f5;}
+  .gbar{position:absolute;top:8px;height:24px;background:var(--blue);border-radius:6px;cursor:grab;display:flex;align-items:center;color:#fff;font-size:11px;font-weight:500;padding-left:8px;white-space:nowrap;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.15);overflow:hidden;}
+  .gbar.cap{background:#1d9e75;} .gbar.total{background:#b9770e;}
+  .ghandle{position:absolute;right:0;top:0;bottom:0;width:12px;cursor:ew-resize;background:rgba(255,255,255,.28);}
+  .ghandle:hover{background:rgba(255,255,255,.55);}
+  .glegend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:10px;}
+  .glegend span{display:flex;align-items:center;gap:5px;}
+  .gsw{width:11px;height:11px;border-radius:3px;display:inline-block;}
   footer{max-width:1150px;margin:6px auto 40px;padding:0 20px;color:var(--muted);font-size:12px;}
   @media(max-width:700px){.hide{display:none;}}
   @media(max-width:600px){
@@ -120,6 +138,7 @@
   <div style="display:flex;gap:4px;">
     <button class="tab active" id="tab-btn-planilla" onclick="showTab('planilla')">Planilla</button>
     <button class="tab" id="tab-btn-metricas" onclick="showTab('metricas')">Métricas</button>
+    <button class="tab" id="tab-btn-cronograma" onclick="showTab('cronograma')">Cronograma</button>
   </div>
   <span class="savep"><span id="saveState"><span class="dot">●</span> Guardado automáticamente</span> &nbsp;·&nbsp; <a href="#" onclick="doLogout();return false;" style="color:var(--muted);text-decoration:underline;">Salir</a></span>
 </div>
@@ -141,6 +160,11 @@
       <h2>Valor por categoría (temporada)</h2>
       <div class="chart-box"><canvas id="catChart"></canvas></div>
     </div>
+  </div>
+
+  <div id="view-cronograma" style="display:none">
+    <p class="gnote">Arrastra el <b>borde derecho</b> de una barra para alargar o acortar la duración, o la <b>barra completa</b> para mover cuándo empieza. Los cambios se guardan y recalculan la planilla al instante.</p>
+    <div class="gantt" id="gantt"></div>
   </div>
 </div>
 
@@ -206,6 +230,7 @@ function save(){try{localStorage.setItem('dashTV3',JSON.stringify(state));}catch
 
 function defCant(it){if(it.tipo==='mensual')return state.meses||1;if(it.tipo==='total')return 1;return state.caps||1;}
 function itemCant(it){return (it.cant!=null&&it.cant!=='')?(+it.cant||0):defCant(it);}
+function itemInicio(it){return (it.inicio!=null&&it.inicio!=='')?(+it.inicio||1):1;}
 function rateOf(it){return it.imp==='factura'?(+state.ivaF||0):it.imp==='boleta'?(+state.ivaB||0):0;}
 function calcBudget(it){const v=+it.valor||0;const base=v*itemCant(it);const temp=base*(1+rateOf(it)/100);return{base:base,temp:temp};}
 
@@ -226,6 +251,7 @@ function upd(cid,sid,iid,f,v){const c=catById(cid);
   else if(f==='tipo'){it.tipo=v;delete it.cant;save();render();return;}
   else if(f==='valor'){it.valor=Number(String(v).replace(/[^0-9]/g,''))||0;save();render();return;}
   else if(f==='cant'){const n=String(v).replace(/[^0-9]/g,'');if(n==='')delete it.cant;else it.cant=+n;save();render();return;}
+  else if(f==='inicio'){it.inicio=Math.max(1,+v||1);save();return;}
   else if(f==='imp'){it.imp=v;save();render();return;}
   save();
 }
@@ -257,6 +283,44 @@ function renderChart(){
 function renderAlerts(){const box=document.getElementById('alerts');if(box)box.innerHTML='';}
 
 function metricasVisible(){return document.getElementById('view-metricas').style.display!=='none';}
+function cronogramaVisible(){const v=document.getElementById('view-cronograma');return v&&v.style.display!=='none';}
+
+function renderGantt(){
+  const g=document.getElementById('gantt');if(!g)return;g.innerHTML='';
+  const LABELW=200,COLW=46;
+  const items=[];(state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{items.push({c,it});})));
+  let maxEnd=Math.max(state.meses||1,6);
+  items.forEach(({it})=>{maxEnd=Math.max(maxEnd,itemInicio(it)+itemCant(it)-1);});
+  const N=Math.min(36,Math.max(6,maxEnd));
+  const gridCols=`${LABELW}px repeat(${N}, ${COLW}px)`;
+  const head=document.createElement('div');head.className='grid-head';head.style.gridTemplateColumns=gridCols;
+  const corner=document.createElement('div');corner.className='gmcell';corner.style.borderRight='1px solid var(--line)';corner.textContent='Servicio';head.appendChild(corner);
+  for(let m=1;m<=N;m++){const c=document.createElement('div');c.className='gmcell';c.textContent=m;head.appendChild(c);}
+  g.appendChild(head);
+  const unit=it=>{const q=itemCant(it);return it.tipo==='mensual'?(q+(q===1?' mes':' meses')):it.tipo==='total'?'temporada':(q+' cap');};
+  let curCat=null;
+  items.forEach(({c,it})=>{
+    if(c!==curCat){curCat=c;const ch=document.createElement('div');ch.className='gcat';ch.textContent=c.nombre;g.appendChild(ch);}
+    const row=document.createElement('div');row.className='grow';row.style.gridTemplateColumns=`${LABELW}px 1fr`;
+    const lab=document.createElement('div');lab.className='glabel';lab.textContent=it.nombre||'(sin nombre)';lab.title=it.nombre||'';row.appendChild(lab);
+    const track=document.createElement('div');track.className='gtrack';
+    for(let m=1;m<N;m++){const gl=document.createElement('div');gl.className='gcol';gl.style.left=(m*COLW)+'px';track.appendChild(gl);}
+    const bar=document.createElement('div');bar.className='gbar '+(it.tipo==='capitulo'?'cap':it.tipo==='total'?'total':'');
+    const lbl=document.createElement('span');bar.appendChild(lbl);
+    const h=document.createElement('div');h.className='ghandle';bar.appendChild(h);
+    function place(){bar.style.left=((itemInicio(it)-1)*COLW)+'px';bar.style.width=(itemCant(it)*COLW-3)+'px';lbl.textContent=unit(it);}
+    place();
+    h.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();const sx=e.clientX,sd=itemCant(it);
+      const mv=ev=>{const nd=Math.max(1,Math.min(N-(itemInicio(it)-1),sd+Math.round((ev.clientX-sx)/COLW)));it.cant=nd;place();};
+      const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);save();render();};
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});
+    bar.addEventListener('mousedown',e=>{if(e.target===h)return;e.preventDefault();const sx=e.clientX,ss=itemInicio(it),dur=itemCant(it);bar.style.cursor='grabbing';
+      const mv=ev=>{const ns=Math.max(1,Math.min(N-dur+1,ss+Math.round((ev.clientX-sx)/COLW)));it.inicio=ns;place();};
+      const up=()=>{bar.style.cursor='grab';document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);save();render();};
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});
+    track.appendChild(bar);row.appendChild(track);g.appendChild(row);
+  });
+}
 
 function render(){
   const root=document.getElementById('cats');root.innerHTML='';
@@ -284,7 +348,7 @@ function render(){
           <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
         <div class="tbl-wrap"><table><thead><tr>
           <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Valor</th>
-          <th class="num col-cant">Cant.</th><th class="col-tipo">Impuesto</th><th class="num">Total temp.</th><th></th>
+          <th class="num col-cant">Tiempo</th><th class="col-tipo">Impuesto</th><th class="num">Total temp.</th><th></th>
         </tr></thead><tbody>${rows}</tbody></table></div>
         <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
         <div class="sub-foot">Valor total: <b>${fmt(sb)}</b></div>`;
@@ -297,16 +361,17 @@ function render(){
         <button class="btn-ghost" onclick="delCat('${cat.id}')">Eliminar</button></div>`;
     cd.appendChild(sec);root.appendChild(cd);
   });
-  renderKPIs();if(metricasVisible())renderChart();
+  renderKPIs();if(metricasVisible())renderChart();if(cronogramaVisible())renderGantt();
 }
 function esc(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
 function showTab(name){
-  document.getElementById('view-planilla').style.display=name==='planilla'?'':'none';
-  document.getElementById('view-metricas').style.display=name==='metricas'?'':'none';
-  document.getElementById('tab-btn-planilla').classList.toggle('active',name==='planilla');
-  document.getElementById('tab-btn-metricas').classList.toggle('active',name==='metricas');
+  ['planilla','metricas','cronograma'].forEach(t=>{
+    const v=document.getElementById('view-'+t);if(v)v.style.display=(t===name)?'':'none';
+    const b=document.getElementById('tab-btn-'+t);if(b)b.classList.toggle('active',t===name);
+  });
   if(name==='metricas'){renderKPIs();renderChart();}
+  if(name==='cronograma'){renderGantt();}
 }
 
 function exportCSV(){
