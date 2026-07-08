@@ -73,9 +73,15 @@
   .dif-pos{color:var(--green);} .dif-neg{color:var(--red);}
   .sub-foot{font-size:12px;color:var(--muted);text-align:right;padding:5px 7px 2px;}
   .sub-foot b{color:#374151;}
-  .col-name{width:24%;}.col-tipo{width:14%;}.col-val{width:12%;}.col-cant{width:9%;}
+  .col-name{width:22%;}.col-tipo{width:13%;}.col-val{width:11%;}.col-cant{width:8%;}.col-prov{width:13%;}
   .tbl-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  .tbl-wrap table{min-width:720px;}
+  .tbl-wrap table{min-width:880px;}
+  .provbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .provfilter{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+  .provfilter select{padding:7px 10px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:13px;background:#fff;min-width:150px;}
+  #provMgr .provrow{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  #provMgr .provrow input{flex:1;max-width:280px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:13px;}
+  #provMgr h3{font-size:13px;margin:0 0 12px;color:var(--navy);font-weight:700;}
   .gnote{font-size:13px;color:var(--muted);margin:0 0 14px;}
   .gnote b{color:#374151;}
   .gantt{border:1px solid var(--line);border-radius:12px;overflow-x:auto;background:#fff;}
@@ -145,6 +151,11 @@
 
 <div class="wrap">
   <div id="view-planilla">
+    <div class="provbar">
+      <div class="provfilter"><label>Ver proveedor:</label><select id="provFilter" onchange="setFilter(this.value)"></select></div>
+      <button onclick="toggleProvMgr()" id="provMgrBtn">Gestionar proveedores</button>
+    </div>
+    <div id="provMgr" class="panel" style="display:none"></div>
     <div class="toolbar">
       <button class="btn-primary" onclick="addCat()">+ Agregar categoría</button>
       <button onclick="exportCSV()">Exportar CSV</button>
@@ -178,10 +189,11 @@ const fmt=n=>(n<0?'-':'')+'$'+nf.format(Math.round(Math.abs(n)));
 const TIPOS={capitulo:'Por capítulo',mensual:'Mensual',total:'Total temporada'};
 const IMPS={factura:'Factura',boleta:'Boleta',exento:'Exento'};
 let uid=1; const nid=()=>'x'+(uid++);
+let filterProv='';
 
 function seed(){
   const C=(nombre,subs)=>({id:nid(),nombre,subs:subs.map(([sn,items])=>({id:nid(),nombre:sn,items:items.map(([n,t,v,r])=>({id:nid(),nombre:n,tipo:t,valor:v,real:r}))}))});
-  return {caps:8,meses:3,ivaF:19,ivaB:15.25,cats:[
+  return {caps:8,meses:3,ivaF:19,ivaB:15.25,proveedores:[{id:nid(),nombre:'Cinefilm'},{id:nid(),nombre:'Canal 13'}],cats:[
     C('Producción',[['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]]]),
     C('Equipo técnico',[['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]]]),
     C('Famosos',[['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]]]),
@@ -197,8 +209,11 @@ const FB_CONFIG={apiKey:"AIzaSyDP3PtRrIBmdi3S2DooQIu10pcy-Jk1zIo",authDomain:"pr
 let state, chart, dbRef=null, online=false, saveTimer=null, lastPushed='';
 function toArr(x){if(Array.isArray(x))return x.filter(e=>e!=null);if(x&&typeof x==='object')return Object.keys(x).sort((a,b)=>a-b).map(k=>x[k]).filter(e=>e!=null);return [];}
 function normalize(s){if(!s||typeof s!=='object')return seed();
-  s.cats=toArr(s.cats).map(c=>{c=c||{};if(!c.id)c.id=nid();if(c.nombre==null)c.nombre='';c.subs=toArr(c.subs).map(sub=>{sub=sub||{};if(!sub.id)sub.id=nid();if(sub.nombre==null)sub.nombre='';sub.items=toArr(sub.items).map(it=>{it=it||{};if(!it.id)it.id=nid();if(it.nombre==null)it.nombre='';if(!it.tipo)it.tipo='capitulo';it.valor=+it.valor||0;if(!it.imp)it.imp='exento';return it;});return sub;});return c;});
-  s.caps=parseInt(s.caps)||8;s.meses=parseInt(s.meses)||3;s.ivaF=(s.ivaF==null?19:+s.ivaF);s.ivaB=(s.ivaB==null?15.25:+s.ivaB);return s;}
+  s.cats=toArr(s.cats).map(c=>{c=c||{};if(!c.id)c.id=nid();if(c.nombre==null)c.nombre='';c.subs=toArr(c.subs).map(sub=>{sub=sub||{};if(!sub.id)sub.id=nid();if(sub.nombre==null)sub.nombre='';sub.items=toArr(sub.items).map(it=>{it=it||{};if(!it.id)it.id=nid();if(it.nombre==null)it.nombre='';if(!it.tipo)it.tipo='capitulo';it.valor=+it.valor||0;if(!it.imp)it.imp='exento';if(it.prov==null)it.prov='';return it;});return sub;});return c;});
+  s.caps=parseInt(s.caps)||8;s.meses=parseInt(s.meses)||3;s.ivaF=(s.ivaF==null?19:+s.ivaF);s.ivaB=(s.ivaB==null?15.25:+s.ivaB);
+  s.proveedores=toArr(s.proveedores).map(p=>({id:p&&p.id?p.id:nid(),nombre:p&&p.nombre!=null?p.nombre:''}));
+  if(!s.proveedores.length)s.proveedores=[{id:nid(),nombre:'Cinefilm'},{id:nid(),nombre:'Canal 13'}];
+  return s;}
 function fixUid(){let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};(state.cats||[]).forEach(c=>{sc(c);(c.subs||[]).forEach(s=>{sc(s);(s.items||[]).forEach(sc);});});uid=mx+1;}
 function load(){
   try{const s=localStorage.getItem('dashTV3');if(s){state=normalize(JSON.parse(s));fixUid();return;}}catch(e){}
@@ -240,7 +255,7 @@ function addCat(){state.cats.push({id:nid(),nombre:'Nueva categoría',subs:[]});
 function delCat(id){state.cats=state.cats.filter(c=>c.id!==id);save();render();}
 function addSub(cid){catById(cid).subs.push({id:nid(),nombre:'Nueva subcategoría',items:[]});save();render();}
 function delSub(cid,sid){const c=catById(cid);c.subs=c.subs.filter(s=>s.id!==sid);save();render();}
-function addItem(cid,sid){subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,imp:'exento'});save();render();}
+function addItem(cid,sid){const prov=(filterProv&&filterProv!=='__none__')?filterProv:'';subById(catById(cid),sid).items.push({id:nid(),nombre:'',tipo:'capitulo',valor:0,imp:'exento',prov:prov});save();render();}
 function delItem(cid,sid,iid){const s=subById(catById(cid),sid);s.items=s.items.filter(i=>i.id!==iid);save();render();}
 function upd(cid,sid,iid,f,v){const c=catById(cid);
   if(f==='catname'){c.nombre=v;save();return;}
@@ -253,7 +268,21 @@ function upd(cid,sid,iid,f,v){const c=catById(cid);
   else if(f==='cant'){const n=String(v).replace(/[^0-9]/g,'');if(n==='')delete it.cant;else it.cant=+n;save();render();return;}
   else if(f==='inicio'){it.inicio=Math.max(1,+v||1);save();return;}
   else if(f==='imp'){it.imp=v;save();render();return;}
+  else if(f==='prov'){it.prov=v;save();render();return;}
   save();
+}
+function addProv(){state.proveedores.push({id:nid(),nombre:'Nuevo proveedor'});save();render();}
+function delProv(id){state.proveedores=state.proveedores.filter(p=>p.id!==id);if(filterProv===id)filterProv='';save();render();}
+function updProvName(id,v){const p=state.proveedores.find(p=>p.id===id);if(p){p.nombre=v;save();render();}}
+function setFilter(v){filterProv=v;render();}
+function toggleProvMgr(){const m=document.getElementById('provMgr');if(m)m.style.display=m.style.display==='none'?'':'none';}
+function passFilter(it){if(!filterProv)return true;if(filterProv==='__none__')return !it.prov||!(state.proveedores||[]).some(p=>p.id===it.prov);return it.prov===filterProv;}
+function renderProvControls(){
+  const provs=state.proveedores||[];
+  const sel=document.getElementById('provFilter');
+  if(sel)sel.innerHTML='<option value="">Todos</option>'+provs.map(p=>`<option value="${p.id}"${filterProv===p.id?' selected':''}>${esc(p.nombre)}</option>`).join('')+`<option value="__none__"${filterProv==='__none__'?' selected':''}>Sin proveedor</option>`;
+  const m=document.getElementById('provMgr');
+  if(m)m.innerHTML='<h3>Proveedores</h3>'+provs.map(p=>`<div class="provrow"><input value="${esc(p.nombre)}" onchange="updProvName('${p.id}',this.value)"><button class="btn-ghost" onclick="delProv('${p.id}')" title="Eliminar">✕</button></div>`).join('')+'<button onclick="addProv()" style="margin-top:6px">+ Agregar proveedor</button>';
 }
 
 function catTotals(cat){let b=0;(cat.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{b+=calcBudget(it).temp;}));return{budget:b};}
@@ -288,7 +317,7 @@ function cronogramaVisible(){const v=document.getElementById('view-cronograma');
 function renderGantt(){
   const g=document.getElementById('gantt');if(!g)return;g.innerHTML='';
   const LABELW=200,COLW=46;
-  const items=[];(state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{items.push({c,it});})));
+  const items=[];(state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{if(passFilter(it))items.push({c,it});})));
   let maxEnd=Math.max(state.meses||1,6);
   items.forEach(({it})=>{maxEnd=Math.max(maxEnd,itemInicio(it)+itemCant(it)-1);});
   const N=Math.min(36,Math.max(6,maxEnd));
@@ -325,42 +354,49 @@ function renderGantt(){
 function render(){
   const root=document.getElementById('cats');root.innerHTML='';
   (state.cats||[]).forEach(cat=>{
-    const ct=catTotals(cat);
     const cd=document.createElement('div');cd.className='cat';
     const sec=document.createElement('div');
+    let catVis=0, catHasVisible=false;
     (cat.subs||[]).forEach(sub=>{
+      const visItems=(sub.items||[]).filter(passFilter);
+      if(filterProv && visItems.length===0) return;
       let sb=0;
       const sd=document.createElement('div');sd.className='sub';
-      const rows=(sub.items||[]).map(it=>{const cb=calcBudget(it);sb+=cb.temp;
+      const rows=visItems.map(it=>{const cb=calcBudget(it);sb+=cb.temp;
         const opts=Object.entries(TIPOS).map(([k,l])=>`<option value="${k}"${it.tipo===k?' selected':''}>${l}</option>`).join('');
         const impo=Object.entries(IMPS).map(([k,l])=>`<option value="${k}"${(it.imp||'exento')===k?' selected':''}>${l}</option>`).join('');
+        const provo=(state.proveedores||[]).map(p=>`<option value="${p.id}"${it.prov===p.id?' selected':''}>${esc(p.nombre)}</option>`).join('');
         return `<tr>
           <td class="col-name"><input value="${esc(it.nombre)}" placeholder="Concepto" oninput="upd('${cat.id}','${sub.id}','${it.id}','nombre',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','tipo',this.value)">${opts}</select></td>
           <td class="col-val"><input class="val" type="text" inputmode="numeric" value="${fmt(it.valor)}" onchange="upd('${cat.id}','${sub.id}','${it.id}','valor',this.value)"></td>
           <td class="col-cant"><input class="val" type="number" min="0" value="${itemCant(it)}" onchange="upd('${cat.id}','${sub.id}','${it.id}','cant',this.value)"></td>
           <td class="col-tipo"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','imp',this.value)">${impo}</select></td>
+          <td class="col-prov"><select onchange="upd('${cat.id}','${sub.id}','${it.id}','prov',this.value)"><option value="">— Proveedor</option>${provo}</select></td>
           <td class="num calc">${fmt(cb.temp)}</td>
           <td class="num"><button class="btn-ghost" onclick="delItem('${cat.id}','${sub.id}','${it.id}')">✕</button></td>
         </tr>`;}).join('');
+      catVis+=sb; catHasVisible=true;
       sd.innerHTML=`
         <div class="sub-head"><input class="name" value="${esc(sub.nombre)}" oninput="upd('${cat.id}','${sub.id}',null,'subname',this.value)">
           <button class="btn-ghost" onclick="delSub('${cat.id}','${sub.id}')">Eliminar</button></div>
         <div class="tbl-wrap"><table><thead><tr>
           <th class="col-name">Concepto</th><th class="col-tipo">Tipo</th><th class="num col-val">Valor</th>
-          <th class="num col-cant">Tiempo</th><th class="col-tipo">Impuesto</th><th class="num">Total temp.</th><th></th>
+          <th class="num col-cant">Tiempo</th><th class="col-tipo">Impuesto</th><th class="col-prov">Proveedor</th><th class="num">Total temp.</th><th></th>
         </tr></thead><tbody>${rows}</tbody></table></div>
         <div class="add-row" style="margin-top:6px"><button onclick="addItem('${cat.id}','${sub.id}')">+ Agregar línea</button></div>
         <div class="sub-foot">Valor total: <b>${fmt(sb)}</b></div>`;
       sec.appendChild(sd);
     });
+    if(filterProv && !catHasVisible) return;
     cd.innerHTML=`<div class="cat-head">
         <input class="name" value="${esc(cat.nombre)}" oninput="upd('${cat.id}',null,null,'catname',this.value)">
-        <span class="cat-tot">Valor total: <b>${fmt(ct.budget)}</b></span>
+        <span class="cat-tot">Valor total: <b>${fmt(catVis)}</b></span>
         <button onclick="addSub('${cat.id}')">+ Subcategoría</button>
         <button class="btn-ghost" onclick="delCat('${cat.id}')">Eliminar</button></div>`;
     cd.appendChild(sec);root.appendChild(cd);
   });
+  renderProvControls();
   renderKPIs();if(metricasVisible())renderChart();if(cronogramaVisible())renderGantt();
 }
 function esc(s){return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
@@ -375,9 +411,10 @@ function showTab(name){
 }
 
 function exportCSV(){
-  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Valor unitario','Cantidad','Impuesto','Neto temporada','Total temporada']];
+  const provName=id=>{const p=(state.proveedores||[]).find(p=>p.id===id);return p?p.nombre:'';};
+  let rows=[['Categoría','Subcategoría','Concepto','Tipo','Valor unitario','Tiempo','Impuesto','Proveedor','Neto temporada','Total temporada']];
   (state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{const cb=calcBudget(it);
-    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,itemCant(it),IMPS[it.imp||'exento'],Math.round(cb.base),Math.round(cb.temp)]);})));
+    rows.push([c.nombre,s.nombre,it.nombre,TIPOS[it.tipo],it.valor,itemCant(it),IMPS[it.imp||'exento'],provName(it.prov),Math.round(cb.base),Math.round(cb.temp)]);})));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='presupuesto_programa.csv';a.click();
 }
@@ -390,6 +427,5 @@ document.getElementById('ivaF').addEventListener('change',e=>{state.ivaF=parseFl
 document.getElementById('ivaB').addEventListener('change',e=>{state.ivaB=parseFloat(e.target.value)||0;save();render();});
 load();setCfgInputs();render();initFirebase();
 </script>
-<!-- deploy-retry 1 -->
 </body>
 </html>
