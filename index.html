@@ -86,6 +86,12 @@
   .gnote b{color:#374151;}
   .gctrls{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);margin-bottom:12px;}
   .gctrls input{width:52px;padding:5px 6px;border:1px solid var(--line);border-radius:6px;text-align:center;font-family:inherit;font-size:13px;font-weight:700;}
+  .gctrls select{padding:5px 7px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:13px;background:#fff;}
+  .gsep{width:1px;height:20px;background:var(--line);}
+  .gseg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .gseg button{border:none;background:#fff;padding:6px 12px;font-size:12px;font-family:inherit;cursor:pointer;color:var(--muted);}
+  .gseg button.on{background:var(--blue);color:#fff;}
+  .gmy{font-size:11px;font-weight:700;color:var(--navy);text-align:center;padding:6px 0;border-right:1px solid var(--line);white-space:nowrap;background:var(--soft);}
   .gep{position:absolute;top:6px;height:22px;background:#eb6834;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.2);z-index:2;}
   .gl-ep{position:absolute;top:0;bottom:0;border-left:1px dashed #eb6834;opacity:.45;pointer-events:none;}
   .g-today{position:absolute;top:0;bottom:0;border-left:2px solid #d03b3b;pointer-events:none;z-index:3;}
@@ -180,11 +186,14 @@
 
   <div id="view-cronograma" style="display:none">
     <div class="gctrls">
+      <label>Inicio: <select id="gMes"></select> <select id="gAnio"></select></label>
+      <span class="gseg"><button type="button" id="vwSem" class="on" onclick="setGView('sem')">Semanas</button><button type="button" id="vwMes" onclick="setGView('mes')">Meses</button></span>
+      <span class="gsep"></span>
       <span><b>Capítulos al aire:</b></span>
       <label>N° <input id="epN" type="number" min="0"></label>
       <label>1er estreno sem. <input id="epStart" type="number" min="1"></label>
       <label>cada <input id="epCada" type="number" min="1"> sem.</label>
-      <label style="margin-left:8px">Hoy = semana <input id="semActual" type="number" min="1"></label>
+      <label style="margin-left:4px">Hoy = semana <input id="semActual" type="number" min="1"></label>
     </div>
     <p class="gnote">Arrastra el <b>borde derecho</b> de una barra para alargar/acortar la duración, o la <b>barra completa</b> para moverla. Los rombos naranjas marcan el <b>estreno de cada capítulo</b> y las líneas punteadas te ayudan a alinear la producción con el aire. La línea roja es <b>hoy</b>.</p>
     <div class="gantt" id="gantt"></div>
@@ -200,12 +209,13 @@ const nf=new Intl.NumberFormat('es-CL',{maximumFractionDigits:0});
 const fmt=n=>(n<0?'-':'')+'$'+nf.format(Math.round(Math.abs(n)));
 const TIPOS={capitulo:'Por capítulo',mensual:'Mensual',total:'Total temporada'};
 const IMPS={factura:'Factura',boleta:'Boleta',exento:'Exento'};
+const MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 let uid=1; const nid=()=>'x'+(uid++);
 let filterProv='';
 
 function seed(){
   const C=(nombre,subs)=>({id:nid(),nombre,subs:subs.map(([sn,items])=>({id:nid(),nombre:sn,items:items.map(([n,t,v,r])=>({id:nid(),nombre:n,tipo:t,valor:v,real:r}))}))});
-  return {caps:8,meses:3,ivaF:19,ivaB:15.25,estreno:{n:8,start:6,cada:1},semActual:1,proveedores:[{id:nid(),nombre:'Cinefilm'},{id:nid(),nombre:'Canal 13'}],cats:[
+  return {caps:8,meses:3,ivaF:19,ivaB:15.25,estreno:{n:8,start:6,cada:1},semActual:1,gStartM:5,gStartY:2026,gView:'sem',proveedores:[{id:nid(),nombre:'Cinefilm'},{id:nid(),nombre:'Canal 13'}],cats:[
     C('Producción',[['Equipo de producción',[['Productor general','capitulo',6000,48000],['Productor de campo','capitulo',3500,28000],['Asistente de producción','capitulo',1500,12000]]],['Productor para pruebas',[['Productor de pruebas','capitulo',2500,20000],['Coordinador de pruebas','capitulo',1200,9600]]],['Locación',[['Locacionista','capitulo',1800,15000],['Permisos y locaciones','total',12000,13500]]],['Oficina',[['Renta de oficina','mensual',2500,7500],['Servicios e internet','mensual',600,1800]]]]),
     C('Equipo técnico',[['Cámara',[['Director de fotografía','capitulo',4000,32000],['Operadores de cámara','capitulo',3500,28000],['Renta de cámaras','mensual',3000,9000]]],['Sonido',[['Ingeniero de sonido','capitulo',2000,16000],['Renta de equipo de audio','mensual',1200,3600]]],['Iluminación',[['Gaffer / iluminación','capitulo',2200,18000],['Renta de luces','mensual',1500,4500]]]]),
     C('Famosos',[['Conducción',[['Conductor principal','capitulo',5000,40000],['Co-conductor','capitulo',2500,20000]]],['Invitados',[['Invitado famoso (ep. 1-4)','capitulo',15000,72000],['Invitado famoso (ep. 5-8)','capitulo',15000,68000]]]]),
@@ -227,6 +237,7 @@ function normalize(s){if(!s||typeof s!=='object')return seed();
   if(!s.proveedores.length)s.proveedores=[{id:nid(),nombre:'Cinefilm'},{id:nid(),nombre:'Canal 13'}];
   const e=s.estreno||{};s.estreno={n:(e.n==null?8:parseInt(e.n)||0),start:(e.start==null?6:parseInt(e.start)||1),cada:(e.cada==null?1:parseInt(e.cada)||1)};
   s.semActual=parseInt(s.semActual)||1;
+  s.gStartM=(s.gStartM==null?5:parseInt(s.gStartM)||0);s.gStartY=parseInt(s.gStartY)||2026;s.gView=(s.gView==='mes'?'mes':'sem');
   return s;}
 function fixUid(){let mx=0;const sc=o=>{if(o&&o.id){const n=parseInt(o.id.slice(1));if(n>mx)mx=n;}};(state.cats||[]).forEach(c=>{sc(c);(c.subs||[]).forEach(s=>{sc(s);(s.items||[]).forEach(sc);});});uid=mx+1;}
 function load(){
@@ -330,49 +341,63 @@ function cronogramaVisible(){const v=document.getElementById('view-cronograma');
 function epWeeksArr(){const e=state.estreno||{n:0,start:6,cada:1};const w=[];for(let i=0;i<(e.n||0);i++)w.push((e.start||1)+i*(e.cada||1));return w;}
 function setEp(f,v){state.estreno=state.estreno||{n:8,start:6,cada:1};state.estreno[f]=Math.max(f==='n'?0:1,parseInt(v)||(f==='n'?0:1));save();if(cronogramaVisible())renderGantt();}
 function setSemActual(v){state.semActual=Math.max(1,parseInt(v)||1);save();if(cronogramaVisible())renderGantt();}
-function setGanttInputs(){const g=(id,val)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=val;};const e=state.estreno||{};g('epN',e.n);g('epStart',e.start);g('epCada',e.cada);g('semActual',state.semActual);}
+function setGView(v){state.gView=(v==='mes'?'mes':'sem');save();if(cronogramaVisible())renderGantt();}
+function ganttMonthLabel(i){const idx=((state.gStartM||0)+i)%12;const y=(state.gStartY||2026)+Math.floor(((state.gStartM||0)+i)/12);return MESES[idx]+' '+y;}
+function barMonths(it){if(it.tipo==='mensual')return Math.max(1,itemCant(it));if(it.tipo==='total')return 1;return Math.max(1,it.gDur!=null?(+it.gDur||1):2);}
+function setBarDur(it,val){const v=Math.max(1,val);if(it.tipo==='mensual')it.cant=v;else if(it.tipo!=='total')it.gDur=v;}
+function fillGCalOptions(){const mm=document.getElementById('gMes'),yy=document.getElementById('gAnio');if(mm&&!mm.options.length)MESES.forEach((m,i)=>{const o=document.createElement('option');o.value=i;o.textContent=m;mm.appendChild(o);});if(yy&&!yy.options.length)for(let y=2024;y<=2032;y++){const o=document.createElement('option');o.value=y;o.textContent=y;yy.appendChild(o);}}
+function setGanttInputs(){fillGCalOptions();const g=(id,val)=>{const el=document.getElementById(id);if(el&&document.activeElement!==el)el.value=val;};const e=state.estreno||{};g('epN',e.n);g('epStart',e.start);g('epCada',e.cada);g('semActual',state.semActual);g('gMes',state.gStartM);g('gAnio',state.gStartY);const a=document.getElementById('vwSem'),b=document.getElementById('vwMes');if(a)a.classList.toggle('on',(state.gView||'sem')==='sem');if(b)b.classList.toggle('on',state.gView==='mes');}
 
 function renderGantt(){
   const g=document.getElementById('gantt');if(!g)return;g.innerHTML='';
-  const LABELW=200,COLW=46;
   setGanttInputs();
+  const view=state.gView||'sem';
+  const LABELW=190, WEEK_W=30, MONTH_W=76;
+  const pxMonth=view==='mes'?MONTH_W:WEEK_W*4;
+  const pxWeek=view==='mes'?MONTH_W/4:WEEK_W;
   const epW=epWeeksArr();const semAct=state.semActual||1;
   const items=[];(state.cats||[]).forEach(c=>(c.subs||[]).forEach(s=>(s.items||[]).forEach(it=>{if(passFilter(it))items.push({c,it});})));
-  let maxEnd=Math.max(state.meses||1,6,semAct);
-  items.forEach(({it})=>{maxEnd=Math.max(maxEnd,itemInicio(it)+itemCant(it)-1);});
-  epW.forEach(w=>{maxEnd=Math.max(maxEnd,w);});
-  const N=Math.min(60,Math.max(6,maxEnd));
-  const decorate=track=>{epW.forEach(w=>{const gl=document.createElement('div');gl.className='gl-ep';gl.style.left=((w-1)*COLW+COLW/2)+'px';track.appendChild(gl);});const td=document.createElement('div');td.className='g-today';td.style.left=((semAct-1)*COLW)+'px';track.appendChild(td);};
-  const gridCols=`${LABELW}px repeat(${N}, ${COLW}px)`;
-  const head=document.createElement('div');head.className='grid-head';head.style.gridTemplateColumns=gridCols;
-  const corner=document.createElement('div');corner.className='gmcell';corner.style.borderRight='1px solid var(--line)';corner.textContent='Servicio';head.appendChild(corner);
-  for(let m=1;m<=N;m++){const c=document.createElement('div');c.className='gmcell';c.textContent=m;head.appendChild(c);}
-  g.appendChild(head);
+  let maxMon=Math.max(state.meses||1,6,Math.ceil(semAct/4));
+  items.forEach(({it})=>{maxMon=Math.max(maxMon,itemInicio(it)-1+barMonths(it));});
+  epW.forEach(w=>{maxMon=Math.max(maxMon,Math.ceil(w/4));});
+  const MON=Math.min(36,Math.max(6,maxMon));
+  const trackPx=MON*pxMonth;
+  const decorate=track=>{epW.forEach(w=>{const x=(w-1)*pxWeek;if(x<=trackPx){const gl=document.createElement('div');gl.className='gl-ep';gl.style.left=(x+pxWeek/2)+'px';track.appendChild(gl);}});const td=document.createElement('div');td.className='g-today';td.style.left=((semAct-1)*pxWeek)+'px';track.appendChild(td);};
+  const hm=document.createElement('div');hm.className='grid-head';hm.style.gridTemplateColumns=`${LABELW}px repeat(${MON}, ${pxMonth}px)`;
+  const c0=document.createElement('div');c0.className='gmy';c0.textContent='Servicio';hm.appendChild(c0);
+  for(let i=0;i<MON;i++){const c=document.createElement('div');c.className='gmy';c.textContent=ganttMonthLabel(i);hm.appendChild(c);}
+  g.appendChild(hm);
+  if(view==='sem'){
+    const hw=document.createElement('div');hw.className='grid-head';hw.style.gridTemplateColumns=`${LABELW}px repeat(${MON*4}, ${WEEK_W}px)`;
+    const w0=document.createElement('div');w0.className='gmcell';w0.style.borderRight='1px solid var(--line)';hw.appendChild(w0);
+    for(let i=0;i<MON*4;i++){const c=document.createElement('div');c.className='gmcell';c.textContent='S'+(i%4+1);hw.appendChild(c);}
+    g.appendChild(hw);
+  }
   const erow=document.createElement('div');erow.className='grow';erow.style.gridTemplateColumns=`${LABELW}px 1fr`;
   const eL=document.createElement('div');eL.className='glabel';eL.style.fontWeight='700';eL.textContent='Capítulos al aire';erow.appendChild(eL);
   const eT=document.createElement('div');eT.className='gtrack';decorate(eT);
-  epW.forEach((w,i)=>{const ep=document.createElement('div');ep.className='gep';ep.style.left=((w-1)*COLW+4)+'px';ep.style.width=(COLW-8)+'px';ep.textContent='C'+(i+1);ep.title='Capítulo '+(i+1)+' · semana '+w;eT.appendChild(ep);});
+  epW.forEach((w,i)=>{const ep=document.createElement('div');ep.className='gep';ep.style.left=((w-1)*pxWeek+2)+'px';ep.style.width=Math.max(16,pxWeek-4)+'px';ep.textContent='C'+(i+1);ep.title='Capítulo '+(i+1)+' · semana '+w;eT.appendChild(ep);});
   erow.appendChild(eT);g.appendChild(erow);
-  const unit=it=>{const q=itemCant(it);return it.tipo==='mensual'?(q+(q===1?' mes':' meses')):it.tipo==='total'?'temporada':(q+' cap');};
+  const unit=it=>{const bm=barMonths(it);return it.tipo==='total'?'temporada':(bm+(bm===1?' mes':' meses'));};
   let curCat=null;
   items.forEach(({c,it})=>{
     if(c!==curCat){curCat=c;const ch=document.createElement('div');ch.className='gcat';ch.textContent=c.nombre;g.appendChild(ch);}
     const row=document.createElement('div');row.className='grow';row.style.gridTemplateColumns=`${LABELW}px 1fr`;
     const lab=document.createElement('div');lab.className='glabel';lab.textContent=it.nombre||'(sin nombre)';lab.title=it.nombre||'';row.appendChild(lab);
     const track=document.createElement('div');track.className='gtrack';
-    for(let m=1;m<N;m++){const gl=document.createElement('div');gl.className='gcol';gl.style.left=(m*COLW)+'px';track.appendChild(gl);}
+    for(let m=1;m<MON;m++){const gl=document.createElement('div');gl.className='gcol';gl.style.left=(m*pxMonth)+'px';track.appendChild(gl);}
     decorate(track);
     const bar=document.createElement('div');bar.className='gbar '+(it.tipo==='capitulo'?'cap':it.tipo==='total'?'total':'');
     const lbl=document.createElement('span');bar.appendChild(lbl);
     const h=document.createElement('div');h.className='ghandle';bar.appendChild(h);
-    function place(){bar.style.left=((itemInicio(it)-1)*COLW)+'px';bar.style.width=(itemCant(it)*COLW-3)+'px';lbl.textContent=unit(it);}
+    function place(){bar.style.left=((itemInicio(it)-1)*pxMonth)+'px';bar.style.width=Math.max(10,barMonths(it)*pxMonth-3)+'px';lbl.textContent=unit(it);}
     place();
-    h.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();const sx=e.clientX,sd=itemCant(it);
-      const mv=ev=>{const nd=Math.max(1,Math.min(N-(itemInicio(it)-1),sd+Math.round((ev.clientX-sx)/COLW)));it.cant=nd;place();};
+    h.addEventListener('mousedown',e=>{e.preventDefault();e.stopPropagation();const sx=e.clientX,sd=barMonths(it);
+      const mv=ev=>{const nd=Math.max(1,Math.min(MON-(itemInicio(it)-1),sd+Math.round((ev.clientX-sx)/pxMonth)));setBarDur(it,nd);place();};
       const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);save();render();};
       document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});
-    bar.addEventListener('mousedown',e=>{if(e.target===h)return;e.preventDefault();const sx=e.clientX,ss=itemInicio(it),dur=itemCant(it);bar.style.cursor='grabbing';
-      const mv=ev=>{const ns=Math.max(1,Math.min(N-dur+1,ss+Math.round((ev.clientX-sx)/COLW)));it.inicio=ns;place();};
+    bar.addEventListener('mousedown',e=>{if(e.target===h)return;e.preventDefault();const sx=e.clientX,ss=itemInicio(it),dur=barMonths(it);bar.style.cursor='grabbing';
+      const mv=ev=>{const ns=Math.max(1,Math.min(MON-dur+1,ss+Math.round((ev.clientX-sx)/pxMonth)));it.inicio=ns;place();};
       const up=()=>{bar.style.cursor='grab';document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);save();render();};
       document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);});
     track.appendChild(bar);row.appendChild(track);g.appendChild(row);
@@ -457,6 +482,8 @@ document.getElementById('epN').addEventListener('change',e=>setEp('n',e.target.v
 document.getElementById('epStart').addEventListener('change',e=>setEp('start',e.target.value));
 document.getElementById('epCada').addEventListener('change',e=>setEp('cada',e.target.value));
 document.getElementById('semActual').addEventListener('change',e=>setSemActual(e.target.value));
+document.getElementById('gMes').addEventListener('change',e=>{state.gStartM=parseInt(e.target.value)||0;save();if(cronogramaVisible())renderGantt();});
+document.getElementById('gAnio').addEventListener('change',e=>{state.gStartY=parseInt(e.target.value)||2026;save();if(cronogramaVisible())renderGantt();});
 load();setCfgInputs();render();initFirebase();
 </script>
 </body>
